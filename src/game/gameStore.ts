@@ -17,15 +17,17 @@
  *     (no exploration) and (current = mainGameHead), otherwise
  *     creating/reusing an exploration branch.
  *
- *   • New actions:
+ *   • Actions:
  *       - goToNode(id)        — navigate without modifying the tree
  *       - tryThisLine()       — fork and replay with engine's bestMove
- *       - returnToMainGame()  — jump back to mainGameHead
- *       - dismissForkError()  — clear the fork-blocked banner
+ *       - popToFrame(frameId) — destructively drop all frames above
+ *                               the target frame and land the board
+ *                               at the target frame's tip (last move
+ *                               inside that frame)
  *
  *   • Anonymous users are capped at MAX_ANON_BRANCHES exploration
- *     branches rooted on the mainline (DESIGN.md §12b). Attempts to
- *     create more set `forkBlockedReason` for a few seconds.
+ *     frames above the mainline (DESIGN.md §12b). Attempts to push
+ *     a new frame past the cap are silently rejected.
  *
  *   • `history` is kept on the store as a convenience (path from
  *     root to current, excluding root) so App.tsx can enable/disable
@@ -52,19 +54,23 @@ import {
   addChild,
   findChildBySan,
   updateNode,
-  findBranchRoot,
   pathFromRoot,
   walkMainline,
+  findFrameForNode,
+  isFrameTip,
+  pushFrame,
+  extendFrame,
+  popToFrameId,
+  stackDepth,
   type GameTree,
   type MoveNode,
+  type StackFrame,
 } from './gameTree';
-import {
-  MAX_ANON_BRANCHES,
-  countExplorationBranches,
-} from '../lib/branchLimit';
+import { MAX_ANON_BRANCHES } from '../lib/branchLimit';
 import { useProfileStore } from '../profile/profileStore';
 import type { WeaknessEvent } from '../profile/types';
 import { saveGame } from './gameStorage';
+import { pushGameRemote } from '../sync/syncOrchestrator';
 
 /**
  * Module-level set so a single tree is "finished" at most once, even
@@ -90,14 +96,21 @@ function computeMainlineAcpl(tree: GameTree, humanColor: 'w' | 'b'): number {
   return n > 0 ? sum / n : 0;
 }
 
-/** Fire-and-forget tree save; errors are swallowed inside gameStorage. */
+/**
+ * Fire-and-forget tree save. Local IndexedDB write is the source of
+ * truth; the remote Supabase upsert is best-effort and only runs when
+ * there is an authenticated session (the orchestrator no-ops for
+ * anonymous users). Errors are swallowed inside both paths.
+ */
 function persistTree(
   tree: GameTree,
   humanColor: 'w' | 'b',
   engineEnabled: boolean,
   finishedAt: number | null = null
 ): void {
-  void saveGame({ tree, humanColor, engineEnabled, finishedAt });
+  void saveGame({ tree, humanColor, engineEnabled, finishedAt }).then((g) => {
+    if (g) pushGameRemote(g);
+  });
 }
 
 /**
@@ -189,13 +202,10 @@ export interface TreeState {
   tree: GameTree;
   currentNodeId: string;
   mainGameHeadId: string;
-  explorationRootId: string | null;
-  /**
-   * Transient error message for the ForkBanner when a branch creation
-   * is rejected (typically the MAX_ANON_BRANCHES cap). Auto-clears
-   * after a few seconds.
-   */
-  forkBlockedReason: string | null;
+  /** The full exploration stack — frame 0 is the mainline. */
+  stackFrames: StackFrame[];
+  /** Id of the frame that currently owns `currentNodeId`. */
+  currentFrameId: string;
   /** Path from root to currentNodeId, excluding root. */
   history: MoveNode[];
 }
@@ -215,15 +225,18 @@ interface GameStore
   /**
    * Fork at the parent of the current node and play the engine's
    * bestMove instead. No-op if we don't have a cached bestMove or if
-   * the anon branch cap has been reached.
+   * the anon stack-depth cap has been reached.
    */
   tryThisLine: () => void;
 
-  /** Jump back to the real game's head. Preserves the branch in the tree. */
-  returnToMainGame: () => void;
-
-  /** Manually dismiss the fork-blocked error banner. */
-  dismissForkError: () => void;
+  /**
+   * Destructively pop the exploration stack down to `frameId`. All
+   * frames strictly above the target are deleted from the tree, and
+   * the board lands at the tip of the target frame (the last move
+   * inside it, or the mainline head for frame 0). Frame 0 can never
+   * be destroyed.
+   */
+  popToFrame: (frameId: string) => void;
 
   /** Start a fresh game (discards the current tree). */
   reset: () => void;
@@ -315,13 +328,14 @@ function navState(
   nodeId: string
 ): TreeState & GameSnapshot & CoachState {
   const node = getNode(tree, nodeId);
-  const branch = findBranchRoot(tree, nodeId);
+  const frame = findFrameForNode(tree, nodeId);
+  tree.currentFrameId = frame.id;
   return {
     tree,
     currentNodeId: nodeId,
     mainGameHeadId: tree.mainGameHeadId,
-    explorationRootId: branch ? branch.id : null,
-    forkBlockedReason: null,
+    stackFrames: tree.stackFrames,
+    currentFrameId: frame.id,
     history: pathFromRoot(tree, nodeId).slice(1),
     ...snapshotFromFen(node.fen),
     lastMoveQuality: node.quality,
@@ -589,18 +603,16 @@ export const useGameStore = create<GameStore>((set, get) => {
         const engineFenAfter = chess.fen();
         const engineMoverColor: 'w' | 'b' = state.turn;
 
-        const { tree: t3, currentNodeId: curId } = state;
-        const curNode = getNode(t3, curId);
+        const { tree: t3, currentNodeId: curId, currentFrameId } = state;
+        const curFrame =
+          t3.stackFrames.find((f) => f.id === currentFrameId) ??
+          t3.stackFrames[0];
 
         const existing = findChildBySan(t3, curId, engineSan);
         let targetId: string;
-        let newMainHead = t3.mainGameHeadId;
-        let newExplorationRootId = state.explorationRootId;
 
         if (existing) {
           targetId = existing.id;
-          const branch = findBranchRoot(t3, targetId);
-          newExplorationRootId = branch ? branch.id : null;
         } else {
           const newNode = addChild(t3, curId, {
             move: engineSan,
@@ -618,18 +630,27 @@ export const useGameStore = create<GameStore>((set, get) => {
           });
           targetId = newNode.id;
 
-          // Engine extending the mainline tip keeps things on the
-          // mainline. Engine moves inside an exploration branch stay
-          // in that branch.
-          if (
-            state.explorationRootId === null &&
-            curId === t3.mainGameHeadId
-          ) {
-            newMainHead = targetId;
-            t3.mainGameHeadId = newMainHead;
+          if (isFrameTip(curFrame, curId)) {
+            // Normal case: engine extends the current frame.
+            extendFrame(t3, curFrame.id, targetId);
+          } else {
+            // Engine played from a non-tip position (unusual — would
+            // only happen after navigation into a mid-frame position
+            // followed by auto-play). Push a new frame, subject to
+            // the stack cap.
+            if (stackDepth(t3) >= MAX_ANON_BRANCHES) {
+              console.warn(
+                '[engine] stack cap reached, dropping engine move',
+                engineUci
+              );
+              return;
+            }
+            pushFrame(t3, curId, targetId);
           }
         }
         t3.currentNodeId = targetId;
+        const targetFrame = findFrameForNode(t3, targetId);
+        t3.currentFrameId = targetFrame.id;
 
         analysisSeq += 1;
         const nextSeq = analysisSeq;
@@ -638,14 +659,14 @@ export const useGameStore = create<GameStore>((set, get) => {
         set({
           tree: { ...t3 },
           currentNodeId: targetId,
-          mainGameHeadId: newMainHead,
-          explorationRootId: newExplorationRootId,
+          mainGameHeadId: t3.mainGameHeadId,
+          stackFrames: t3.stackFrames,
+          currentFrameId: targetFrame.id,
           history: pathFromRoot(t3, targetId).slice(1),
           ...snap,
           lastBestMove: null,
           // Keep the human's coach state pinned until the NEXT human move.
         });
-        void curNode; // referenced above for readability
 
         // Phase 5: persist tree + mark game finished if the engine's
         // move just ended the main game.
@@ -666,8 +687,8 @@ export const useGameStore = create<GameStore>((set, get) => {
     tree: initialTree,
     currentNodeId: initialTree.rootId,
     mainGameHeadId: initialTree.mainGameHeadId,
-    explorationRootId: null,
-    forkBlockedReason: null,
+    stackFrames: initialTree.stackFrames,
+    currentFrameId: initialTree.currentFrameId,
     history: [],
 
     // Board snapshot defaults
@@ -694,7 +715,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       if (state.isGameOver) return false;
       if (state.engineEnabled && state.turn !== state.humanColor) return false;
 
-      const { tree, currentNodeId, mainGameHeadId, explorationRootId } = state;
+      const { tree, currentNodeId, currentFrameId } = state;
       const currentNode = getNode(tree, currentNodeId);
 
       // Apply the move on a scratch chess instance to validate it and
@@ -720,21 +741,17 @@ export const useGameStore = create<GameStore>((set, get) => {
         return true;
       }
 
-      // Fresh move — would this create a new top-level branch root?
-      const wouldCreateNewBranchRoot =
-        explorationRootId === null && currentNodeId !== mainGameHeadId;
-      if (wouldCreateNewBranchRoot) {
-        const count = countExplorationBranches(tree);
-        if (count >= MAX_ANON_BRANCHES) {
-          const msg = `Anonymous branch limit reached (${MAX_ANON_BRANCHES}). Sign in to unlock unlimited branches.`;
-          set({ forkBlockedReason: msg });
-          setTimeout(() => {
-            if (get().forkBlockedReason === msg) {
-              set({ forkBlockedReason: null });
-            }
-          }, 5000);
-          return false;
-        }
+      // Fresh move — figure out whether it extends the current frame
+      // (playing at the frame's tip) or pushes a new frame (playing
+      // from a mid-frame position). Pushing is subject to the cap.
+      const curFrame =
+        tree.stackFrames.find((f) => f.id === currentFrameId) ??
+        tree.stackFrames[0];
+      const willPushFrame = !isFrameTip(curFrame, currentNodeId);
+
+      if (willPushFrame && stackDepth(tree) >= MAX_ANON_BRANCHES) {
+        // Silently refuse — the stack panel already shows the cap.
+        return false;
       }
 
       const fenBefore = currentNode.fen;
@@ -757,20 +774,15 @@ export const useGameStore = create<GameStore>((set, get) => {
         cpLoss: null,
       });
 
-      let newMainHead = mainGameHeadId;
-      let newExplorationRootId = explorationRootId;
-
-      if (explorationRootId === null && currentNodeId === mainGameHeadId) {
-        // Mainline extension — advance the real game tip.
-        newMainHead = newNode.id;
-        tree.mainGameHeadId = newMainHead;
-      } else if (explorationRootId === null) {
-        // Starting a new branch from mainline middle.
-        newExplorationRootId = newNode.id;
+      if (willPushFrame) {
+        pushFrame(tree, currentNodeId, newNode.id);
+      } else {
+        extendFrame(tree, curFrame.id, newNode.id);
       }
-      // else: extending an existing branch — no pointer changes.
 
       tree.currentNodeId = newNode.id;
+      const newFrame = findFrameForNode(tree, newNode.id);
+      tree.currentFrameId = newFrame.id;
 
       analysisSeq += 1;
       const seq = analysisSeq;
@@ -779,8 +791,9 @@ export const useGameStore = create<GameStore>((set, get) => {
       set({
         tree: { ...tree },
         currentNodeId: newNode.id,
-        mainGameHeadId: newMainHead,
-        explorationRootId: newExplorationRootId,
+        mainGameHeadId: tree.mainGameHeadId,
+        stackFrames: tree.stackFrames,
+        currentFrameId: newFrame.id,
         history: pathFromRoot(tree, newNode.id).slice(1),
         ...snap,
         lastBestMove: null,
@@ -855,16 +868,10 @@ export const useGameStore = create<GameStore>((set, get) => {
         userMoveNode.bestMoveBeforeUci ?? lastMoveBestMoveBefore;
       if (!bestUci) return;
 
-      // Check the anon cap BEFORE doing any work.
-      const count = countExplorationBranches(tree);
-      if (count >= MAX_ANON_BRANCHES) {
-        const msg = `Anonymous branch limit reached (${MAX_ANON_BRANCHES}). Sign in to unlock unlimited branches.`;
-        set({ forkBlockedReason: msg });
-        setTimeout(() => {
-          if (get().forkBlockedReason === msg) {
-            set({ forkBlockedReason: null });
-          }
-        }, 5000);
+      // "Try this line" always spawns a new frame — even if the user
+      // made the move at the tip of the current frame, we're forking
+      // off the *parent* position (the one BEFORE the user's move).
+      if (stackDepth(tree) >= MAX_ANON_BRANCHES) {
         return;
       }
 
@@ -891,9 +898,13 @@ export const useGameStore = create<GameStore>((set, get) => {
       const uci = `${move.from}${move.to}${move.promotion ?? ''}`;
       const fenAfter = chess.fen();
 
-      // If a sibling with this SAN already exists, reuse it.
+      // If a sibling with this SAN already exists, reuse it; otherwise
+      // add a new child of the parent and push a new frame.
       let targetNode = findChildBySan(tree, parent.id, san);
-      if (!targetNode) {
+      let targetFrame: StackFrame;
+      if (targetNode) {
+        targetFrame = findFrameForNode(tree, targetNode.id);
+      } else {
         targetNode = addChild(tree, parent.id, {
           move: san,
           uci,
@@ -908,9 +919,11 @@ export const useGameStore = create<GameStore>((set, get) => {
           coachSource: null,
           cpLoss: null,
         });
+        targetFrame = pushFrame(tree, parent.id, targetNode.id);
       }
 
       tree.currentNodeId = targetNode.id;
+      tree.currentFrameId = targetFrame.id;
       analysisSeq += 1;
       const seq = analysisSeq;
 
@@ -919,11 +932,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         tree: { ...tree },
         currentNodeId: targetNode.id,
         mainGameHeadId: tree.mainGameHeadId,
-        // This branch is explicitly an exploration root.
-        explorationRootId: targetNode.isExploration
-          ? targetNode.id
-          : findBranchRoot(tree, targetNode.id)?.id ?? targetNode.id,
-        forkBlockedReason: null,
+        stackFrames: tree.stackFrames,
+        currentFrameId: targetFrame.id,
         history: pathFromRoot(tree, targetNode.id).slice(1),
         ...snap,
         thinking: false,
@@ -940,28 +950,31 @@ export const useGameStore = create<GameStore>((set, get) => {
       kickAnalysis(snap.fen, snap.turn, seq);
     },
 
-    returnToMainGame: () => {
+    popToFrame: (frameId) => {
       const { tree } = get();
-      tree.currentNodeId = tree.mainGameHeadId;
+      const frameExists = tree.stackFrames.some((f) => f.id === frameId);
+      if (!frameExists) return;
+
+      const { landingNodeId } = popToFrameId(tree, frameId);
+      tree.currentNodeId = landingNodeId;
+      const newFrame = findFrameForNode(tree, landingNodeId);
+      tree.currentFrameId = newFrame.id;
+
       analysisSeq += 1;
       const seq = analysisSeq;
       set({
-        ...navState(tree, tree.mainGameHeadId),
+        ...navState(tree, landingNodeId),
         tree: { ...tree },
-        explorationRootId: null,
-        forkBlockedReason: null,
+        stackFrames: tree.stackFrames,
+        currentFrameId: newFrame.id,
         thinking: false,
         lastBestMove: null,
         evalCp: 0,
         mate: null,
         evalDepth: 0,
       });
-      const snap = snapshotFromFen(getNode(tree, tree.mainGameHeadId).fen);
+      const snap = snapshotFromFen(getNode(tree, landingNodeId).fen);
       kickObservation(snap.fen, snap.turn, seq);
-    },
-
-    dismissForkError: () => {
-      set({ forkBlockedReason: null });
     },
 
     reset: () => {
@@ -981,8 +994,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         tree: fresh,
         currentNodeId: fresh.rootId,
         mainGameHeadId: fresh.mainGameHeadId,
-        explorationRootId: null,
-        forkBlockedReason: null,
+        stackFrames: fresh.stackFrames,
+        currentFrameId: fresh.currentFrameId,
         history: [],
         ...snap,
         thinking: false,

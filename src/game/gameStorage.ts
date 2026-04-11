@@ -33,23 +33,56 @@ export function serializeTree(tree: GameTree): SerializedGameTree {
     rootId: tree.rootId,
     currentNodeId: tree.currentNodeId,
     mainGameHeadId: tree.mainGameHeadId,
-    explorationRootId: tree.explorationRootId,
     result: tree.result,
     startedAt: tree.startedAt,
     nodes: Array.from(tree.nodes.values()),
+    stackFrames: tree.stackFrames,
+    currentFrameId: tree.currentFrameId,
   };
 }
 
-/** Rebuild a live `GameTree` from its serialized projection. */
+/**
+ * Rebuild a live `GameTree` from its serialized projection. If the
+ * payload was written by an older build (no `stackFrames`), we
+ * synthesize a single mainline frame walking first-children from the
+ * root — keeps legacy games loadable without a migration script.
+ */
 export function deserializeTree(s: SerializedGameTree): GameTree {
   const nodes = new Map<string, MoveNode>();
   for (const n of s.nodes) nodes.set(n.id, n);
+
+  let stackFrames = s.stackFrames;
+  let currentFrameId = s.currentFrameId;
+  if (!stackFrames || !currentFrameId) {
+    // Legacy migration: rebuild frame 0 from the first-child chain.
+    const mainIds: string[] = [];
+    let cur: MoveNode | undefined = nodes.get(s.rootId);
+    while (cur) {
+      mainIds.push(cur.id);
+      const nextId = cur.childrenIds[0];
+      cur = nextId ? nodes.get(nextId) : undefined;
+    }
+    const frameId = `${s.id}:frame-0`;
+    stackFrames = [
+      {
+        id: frameId,
+        index: 0,
+        parentFrameId: null,
+        forkPointNodeId: null,
+        nodeIds: mainIds,
+        label: 'Mainline',
+      },
+    ];
+    currentFrameId = frameId;
+  }
+
   return {
     id: s.id,
     rootId: s.rootId,
     currentNodeId: s.currentNodeId,
     mainGameHeadId: s.mainGameHeadId,
-    explorationRootId: s.explorationRootId,
+    stackFrames,
+    currentFrameId,
     result: s.result as GameTree['result'],
     startedAt: s.startedAt,
     nodes,
@@ -99,13 +132,18 @@ async function writeIndex(idx: PersistedGameIndexEntry[]): Promise<void> {
  * Persist (or update) a game by id. Upserts into the index and
  * writes the full tree under its own key. Safe to call opportunistically —
  * e.g. every N moves, on branch creation, or on game end.
+ *
+ * Returns the `PersistedGame` it built (with a fresh `updatedAt`) so
+ * callers that also want to dual-write to Supabase can do so without
+ * recomputing metadata. Returns `null` when the local write itself
+ * failed — in that case the caller should not mirror to remote either.
  */
 export async function saveGame(params: {
   tree: GameTree;
   humanColor: 'w' | 'b';
   engineEnabled: boolean;
   finishedAt?: number | null;
-}): Promise<void> {
+}): Promise<PersistedGame | null> {
   const { tree, humanColor, engineEnabled } = params;
   const now = Date.now();
   const game: PersistedGame = {
@@ -124,9 +162,30 @@ export async function saveGame(params: {
     await localforage.setItem(gameKey(game.id), game);
   } catch (err) {
     console.warn('[gameStorage] saveGame failed', err);
-    return;
+    return null;
   }
 
+  const idx = await readIndex();
+  const entry = toIndexEntry(game);
+  const without = idx.filter((e) => e.id !== game.id);
+  without.unshift(entry);
+  await writeIndex(without);
+  return game;
+}
+
+/**
+ * Write a fully-formed `PersistedGame` straight to IndexedDB without
+ * recomputing metadata. Used by the Phase 9 sync orchestrator when
+ * hydrating the local cache from remote rows — we must preserve the
+ * server's `updated_at` so subsequent remote saves don't loop.
+ */
+export async function writePersistedGame(game: PersistedGame): Promise<void> {
+  try {
+    await localforage.setItem(gameKey(game.id), game);
+  } catch (err) {
+    console.warn('[gameStorage] writePersistedGame failed', err);
+    return;
+  }
   const idx = await readIndex();
   const entry = toIndexEntry(game);
   const without = idx.filter((e) => e.id !== game.id);

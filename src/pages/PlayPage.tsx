@@ -9,8 +9,8 @@
 import Board from '../components/Board';
 import CoachPanel from '../components/CoachPanel';
 import EvalBar from '../components/EvalBar';
-import ForkBanner from '../components/ForkBanner';
 import MoveList from '../components/MoveList';
+import StackPanel from '../components/StackPanel';
 import { useGameStore } from '../game/gameStore';
 
 export default function PlayPage() {
@@ -44,9 +44,6 @@ export default function PlayPage() {
   return (
     <main className="grid flex-1 grid-cols-1 gap-6 p-6 lg:grid-cols-[auto_auto_320px]">
       <section className="flex flex-col items-center gap-4">
-        <div className="w-full max-w-[560px]">
-          <ForkBanner />
-        </div>
         <div className="flex items-start gap-4">
           <EvalBar orientation={boardOrientation} />
           <div className="w-[480px] max-w-[calc(100vw-8rem)]">
@@ -149,6 +146,10 @@ export default function PlayPage() {
           <MoveList />
         </div>
       </aside>
+
+      <div className="lg:w-[320px]">
+        <StackPanel />
+      </div>
     </main>
   );
 }

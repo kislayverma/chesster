@@ -13,7 +13,7 @@
 import type { MoveQuality } from '../game/moveClassifier';
 import type { GamePhase } from '../tagging/phaseDetector';
 import type { MotifId } from '../tagging/motifs';
-import type { MoveNode } from '../game/gameTree';
+import type { MoveNode, StackFrame } from '../game/gameTree';
 
 export type { ProfileSummary } from '../coach/types';
 
@@ -116,10 +116,16 @@ export interface SerializedGameTree {
   rootId: string;
   currentNodeId: string;
   mainGameHeadId: string;
-  explorationRootId: string | null;
   result: string | null;
   startedAt: number;
   nodes: MoveNode[];
+  /**
+   * Phase 6 stack-of-forks overlay. Older persisted games lack these
+   * fields — the loader synthesizes a single mainline frame when it
+   * sees an absent `stackFrames`.
+   */
+  stackFrames?: StackFrame[];
+  currentFrameId?: string;
 }
 
 /**

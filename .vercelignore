@@ -1,0 +1,20 @@
+# Phase 8 — files not needed by Vercel builds.
+#
+# Vercel uploads the repo (minus .git, node_modules, and this list) to
+# its build environment. Trimming the upload shaves seconds off every
+# deploy. None of these files are referenced by the build pipeline,
+# the serverless functions, or the static output in dist/.
+
+# Design-time assets that ship outside the build.
+SBS - 2D Chess Pack/
+
+# Docs — kept in the repo for humans, not needed on the build machine.
+DESIGN.md
+
+# Local-only artifacts.
+.env.local
+*.log
+.DS_Store
+
+# Previous builds — Vercel recreates dist/ from source.
+dist/

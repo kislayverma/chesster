@@ -1,37 +1,47 @@
 /**
- * Phase 4 game tree.
+ * Phase 6 game tree — destructive stack-of-forks model.
  *
- * Replaces the flat chess.js history with a proper tree so the user
- * can branch off at any ply (via "Try this line"), explore the
- * variation, and jump back to the main game without losing progress.
+ * Replaces Phase 4's persistent "first-child = mainline, siblings =
+ * branches forever" model with a stack of *frames*. A frame is a
+ * contiguous linear chain of moves the player followed. Frame 0 is
+ * the real game (the mainline) and is permanent. Pushing a new frame
+ * happens any time the player plays a move from a position that isn't
+ * the tip of the current frame — i.e. they forked. Popping a frame is
+ * destructive: every node belonging to the frames being removed is
+ * physically deleted from `tree.nodes` and from their parent's
+ * `childrenIds`. This is the core of DESIGN.md §13.
  *
- * Shape:
+ * The tree itself is still parent/childrenIds-structured so the board
+ * + move list can walk it the same way they always did. The frames
+ * array sits on top as an ordering overlay: each frame owns a list of
+ * node ids, and `stackFrames[0].nodeIds` IS the mainline.
  *
- *   • `MoveNode` — one half-move. Holds the SAN + UCI of the move,
- *     the resulting FEN, cached eval/coach payload, and the ids of
- *     its children (first child = mainline continuation, siblings =
- *     exploration branches).
+ * Invariants:
  *
- *   • `GameTree` — id-indexed map of nodes plus navigation pointers:
- *       - rootId              → starting position (empty move)
- *       - currentNodeId       → what the board is showing right now
- *       - mainGameHeadId      → tip of the "real game" (mainline only)
- *       - explorationRootId   → if set, the user is inside a branch
- *                               rooted at this node; "Return to main
- *                               game" sends currentNodeId back to
- *                               mainGameHeadId and clears this.
+ *   • Frame 0 (index 0) always exists, has parentFrameId=null,
+ *     forkPointNodeId=null, and its first nodeId is `tree.rootId`.
+ *     It can never be destroyed.
  *
- * The mainline is defined as the chain you get by always following
- * `childrenIds[0]` starting from root. When the user plays a move
- * from the current mainline head, it's pushed as the new first child
- * and the mainline extends. When the user plays a move from somewhere
- * that isn't the mainline head (e.g. after clicking "Try this line"),
- * the new move becomes a sibling on a branch and `isExploration` is
- * set to true on the branch root.
+ *   • For K > 0, `stackFrames[K]` was pushed onto the stack after
+ *     `stackFrames[K-1]` (push order is stack order, not parentage).
+ *     `forkPointNodeId` lives in SOME earlier frame — usually but not
+ *     necessarily K-1. It is the node at which the player decided to
+ *     try an alternative line.
  *
- * Jumping to any node (e.g. click a move in the MoveList) just sets
- * currentNodeId — it does not truncate or rewrite anything. That's
- * the whole point of the tree: nothing is ever lost.
+ *   • Mainline extension: when the player plays a move from the tip
+ *     of the current frame, the new node is added as a child of the
+ *     tip and appended to the current frame's `nodeIds`.
+ *
+ *   • Fork: when the player plays a move from a non-tip position, a
+ *     new frame is pushed with `forkPointNodeId = currentNodeId` and
+ *     its first node is the new move. The new node is added as a
+ *     (non-first) child of the fork point so `walkMainline` keeps
+ *     following the original first-child chain.
+ *
+ *   • `popToFrameId(tree, frameId)` removes every frame strictly
+ *     above `frameId` in the stack, deleting their nodes from the
+ *     tree. `frameId` itself is preserved (that's the user-facing
+ *     spec: clicking a frame doesn't kill it).
  */
 
 import { v4 as uuidv4 } from 'uuid';
@@ -77,18 +87,38 @@ export interface MoveNode {
   cpLoss: number | null;
 
   /**
-   * Child ids. `childrenIds[0]` is the mainline continuation; any
-   * additional entries are exploration branches / alternative moves.
+   * Child ids. `childrenIds[0]` is the first child (the continuation
+   * of whichever frame the parent belongs to). Any entries beyond
+   * that are roots of frames pushed on top of this node.
    */
   childrenIds: string[];
+}
 
+/**
+ * A single level of the exploration stack. Frame 0 is the mainline
+ * (the real game) and is permanent; K > 0 are the pushed branches.
+ */
+export interface StackFrame {
+  /** Stable id for this frame. */
+  id: string;
+  /** 0-based position in the stack (0 = mainline). */
+  index: number;
+  /** Parent frame id, or null for the mainline. */
+  parentFrameId: string | null;
   /**
-   * True when this node is the *root* of an exploration branch —
-   * i.e. it was inserted by "Try this line" or by playing a move off
-   * the main game. Nodes deeper in the branch inherit their branch
-   * status via the ancestor chain, not via this flag.
+   * The node in the parent frame at which this fork was spawned, or
+   * null for the mainline. After a destructive pop this is where the
+   * board lands.
    */
-  isExploration: boolean;
+  forkPointNodeId: string | null;
+  /**
+   * Ordered list of node ids belonging to this frame, from earliest
+   * to latest. `nodeIds[0]` is the first move (for frame 0 it's the
+   * synthetic root node). `nodeIds[nodeIds.length-1]` is the tip.
+   */
+  nodeIds: string[];
+  /** Human-readable label for the stack panel. */
+  label: string;
 }
 
 export interface GameTree {
@@ -98,16 +128,18 @@ export interface GameTree {
   /** The node whose FEN the board is showing right now. */
   currentNodeId: string;
   /**
-   * Tip of the "real game" (always on the mainline). Engine play and
-   * normal moves from the mainline head extend this.
+   * Convenience mirror of `stackFrames[0]` tip. Kept on the tree so
+   * MoveList can read it without touching the stack array.
    */
   mainGameHeadId: string;
+  /** The entire exploration stack, frame 0 is always the mainline. */
+  stackFrames: StackFrame[];
   /**
-   * If the user is currently inside an exploration branch, this is
-   * the id of the branch's root. `null` when the user is on the
-   * mainline.
+   * Id of the frame that currently owns `currentNodeId`. Updated on
+   * every navigation / move. This is "which row of the stack panel
+   * should be highlighted".
    */
-  explorationRootId: string | null;
+  currentFrameId: string;
   /** Final result if the game has ended on the mainline. */
   result: '1-0' | '0-1' | '1/2-1/2' | null;
   /** When this game tree was created (ms since epoch). */
@@ -138,17 +170,27 @@ export function createTree(startingFen: string = STARTING_FEN): GameTree {
     coachSource: null,
     cpLoss: null,
     childrenIds: [],
-    isExploration: false,
   };
   const nodes = new Map<string, MoveNode>();
   nodes.set(rootId, root);
+
+  const mainlineFrame: StackFrame = {
+    id: uuidv4(),
+    index: 0,
+    parentFrameId: null,
+    forkPointNodeId: null,
+    nodeIds: [rootId],
+    label: 'Mainline',
+  };
+
   return {
     id: uuidv4(),
     nodes,
     rootId,
     currentNodeId: rootId,
     mainGameHeadId: rootId,
-    explorationRootId: null,
+    stackFrames: [mainlineFrame],
+    currentFrameId: mainlineFrame.id,
     result: null,
     startedAt: Date.now(),
   };
@@ -159,6 +201,13 @@ export function getNode(tree: GameTree, id: string): MoveNode {
   const n = tree.nodes.get(id);
   if (!n) throw new Error(`gameTree: node ${id} not found`);
   return n;
+}
+
+/** Look up a frame by id, throwing if missing. */
+export function getFrame(tree: GameTree, id: string): StackFrame {
+  const f = tree.stackFrames.find((fr) => fr.id === id);
+  if (!f) throw new Error(`gameTree: frame ${id} not found`);
+  return f;
 }
 
 /**
@@ -180,28 +229,23 @@ export function findChildBySan(
 }
 
 /**
- * Append a new child to `parentId`. The caller is responsible for
- * deciding whether the child is a mainline continuation (first child)
- * or an exploration sibling. `isExploration` is stamped on the new
- * node if-and-only-if the parent already has a child — i.e. the new
- * node is a second+ child. Mutates `tree` in place and returns the
- * new node.
+ * Append a new child to `parentId`. First child is a simple
+ * continuation; subsequent children are the roots of branch frames.
+ * Mutates `tree` in place and returns the new node.
  */
 export function addChild(
   tree: GameTree,
   parentId: string,
-  partial: Omit<MoveNode, 'id' | 'parentId' | 'childrenIds' | 'isExploration' | 'ply'>
+  partial: Omit<MoveNode, 'id' | 'parentId' | 'childrenIds' | 'ply'>
 ): MoveNode {
   const parent = getNode(tree, parentId);
   const id = uuidv4();
-  const isExploration = parent.childrenIds.length > 0;
   const node: MoveNode = {
     ...partial,
     id,
     parentId,
     ply: parent.ply + 1,
     childrenIds: [],
-    isExploration,
   };
   tree.nodes.set(id, node);
   parent.childrenIds.push(id);
@@ -236,35 +280,126 @@ export function pathFromRoot(tree: GameTree, id: string): MoveNode[] {
 }
 
 /**
- * Yield nodes along the mainline (root, then root.childrenIds[0],
- * then that node's first child, etc.) until the chain ends.
+ * Yield nodes along the mainline. In the stack model this is exactly
+ * frame 0's `nodeIds`.
  */
 export function* walkMainline(tree: GameTree): Generator<MoveNode> {
-  let cur: MoveNode | undefined = tree.nodes.get(tree.rootId);
-  while (cur) {
-    yield cur;
-    const nextId = cur.childrenIds[0];
-    cur = nextId ? tree.nodes.get(nextId) : undefined;
+  const main = tree.stackFrames[0];
+  if (!main) return;
+  for (const id of main.nodeIds) {
+    const n = tree.nodes.get(id);
+    if (n) yield n;
   }
 }
 
-/** True if `id` is reachable from root by always taking the first child. */
-export function isMainlineNode(tree: GameTree, id: string): boolean {
-  for (const n of walkMainline(tree)) {
-    if (n.id === id) return true;
-  }
-  return false;
+/** True if `id` is the current tip of `frame`. */
+export function isFrameTip(frame: StackFrame, id: string): boolean {
+  return frame.nodeIds[frame.nodeIds.length - 1] === id;
 }
 
 /**
- * Return the branch root (the nearest ancestor with `isExploration=true`)
- * for `id`, or null if `id` is on the mainline.
+ * Linear search across every frame's `nodeIds` for the frame that
+ * owns `nodeId`. Returns frame 0 as a safe fallback if the node
+ * isn't found on any frame (which shouldn't normally happen).
  */
-export function findBranchRoot(tree: GameTree, id: string): MoveNode | null {
-  let cur: MoveNode | null = getNode(tree, id);
-  while (cur) {
-    if (cur.isExploration) return cur;
-    cur = cur.parentId ? getNode(tree, cur.parentId) : null;
+export function findFrameForNode(
+  tree: GameTree,
+  nodeId: string
+): StackFrame {
+  for (const frame of tree.stackFrames) {
+    if (frame.nodeIds.includes(nodeId)) return frame;
   }
-  return null;
+  return tree.stackFrames[0];
+}
+
+/** Append `nodeId` to a frame's tip, mutating the tree's frame array. */
+export function extendFrame(
+  tree: GameTree,
+  frameId: string,
+  nodeId: string
+): void {
+  const frame = getFrame(tree, frameId);
+  frame.nodeIds = [...frame.nodeIds, nodeId];
+  if (frame.index === 0) {
+    tree.mainGameHeadId = nodeId;
+  }
+}
+
+/**
+ * Push a new frame onto the stack with its first node already
+ * materialized. `firstMoveNodeId` must already be in `tree.nodes`
+ * (the caller is responsible for `addChild`-ing it). Returns the
+ * new frame.
+ */
+export function pushFrame(
+  tree: GameTree,
+  forkPointNodeId: string,
+  firstMoveNodeId: string
+): StackFrame {
+  const parentFrame = findFrameForNode(tree, forkPointNodeId);
+  const index = tree.stackFrames.length;
+  const frame: StackFrame = {
+    id: uuidv4(),
+    index,
+    parentFrameId: parentFrame.id,
+    forkPointNodeId,
+    nodeIds: [firstMoveNodeId],
+    label: `Branch ${index}`,
+  };
+  tree.stackFrames = [...tree.stackFrames, frame];
+  return frame;
+}
+
+/**
+ * Destructively remove every frame strictly above `targetFrameId`.
+ * Returns:
+ *   - the target frame (which is preserved), and
+ *   - the node id where the board should land: for K>0 it's the
+ *     target frame's fork point (a node in some earlier frame); for
+ *     frame 0 it's the current mainline head.
+ *
+ * Mutates `tree` in place.
+ */
+export function popToFrameId(
+  tree: GameTree,
+  targetFrameId: string
+): { target: StackFrame; landingNodeId: string } {
+  const idx = tree.stackFrames.findIndex((f) => f.id === targetFrameId);
+  if (idx < 0) {
+    throw new Error(`popToFrameId: frame ${targetFrameId} not found`);
+  }
+  const target = tree.stackFrames[idx];
+
+  // Walk top-down so the bottom-most dropped frame is destroyed last;
+  // in practice order doesn't matter because each frame is fully
+  // self-contained and cleanup is idempotent.
+  for (let i = tree.stackFrames.length - 1; i > idx; i--) {
+    const frame = tree.stackFrames[i];
+    for (const nodeId of frame.nodeIds) {
+      const node = tree.nodes.get(nodeId);
+      if (!node) continue;
+      if (node.parentId) {
+        const parent = tree.nodes.get(node.parentId);
+        if (parent) {
+          parent.childrenIds = parent.childrenIds.filter((c) => c !== nodeId);
+        }
+      }
+      tree.nodes.delete(nodeId);
+    }
+  }
+
+  tree.stackFrames = tree.stackFrames.slice(0, idx + 1);
+
+  // Land at the tip of the target frame. For frame 0 this is the
+  // mainline head; for branch frames this is the last move the player
+  // made inside that branch (so clicking "Branch 1" drops you back at
+  // Branch 1's last position, not at its fork point in the parent).
+  const landingNodeId = target.nodeIds[target.nodeIds.length - 1];
+
+  return { target, landingNodeId };
+}
+
+/** Number of exploration frames on top of the mainline. */
+export function stackDepth(tree: GameTree): number {
+  return Math.max(0, tree.stackFrames.length - 1);
 }

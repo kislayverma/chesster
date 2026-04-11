@@ -1,39 +1,26 @@
 /**
- * Anonymous-user branch cap (DESIGN.md §12b).
+ * Anonymous-user stack depth cap (DESIGN.md §12b).
  *
- * While the user isn't signed in we don't want them creating an
- * unbounded forest of exploration branches — it bloats memory, makes
- * the MoveList unreadable, and encourages one-shot throwaway usage.
- * Cap the number of exploration branches rooted directly on the
- * mainline; signed-in users have no limit.
- *
- * "Exploration branches rooted on the mainline" means: walk the
- * mainline, and for each mainline node count how many of its
- * non-first-child descendants exist. Branches nested inside branches
- * don't count toward the cap — this is intentional, it keeps the
- * meaningful unit "how many alternative lines has the user started
- * from the real game".
+ * The Phase 6 stack-of-forks model replaces the old "persistent
+ * siblings" branching with a linear stack of exploration frames.
+ * While the user isn't signed in we cap the number of exploration
+ * frames that can sit on top of the mainline — going deeper requires
+ * popping the stack first. Mainline itself (frame 0) is never counted
+ * or capped.
  */
 
 import type { GameTree } from '../game/gameTree';
-import { walkMainline } from '../game/gameTree';
+import { stackDepth } from '../game/gameTree';
 
-/** Hard cap on exploration branches for anonymous users. */
+/** Hard cap on exploration frames above the mainline for anonymous users. */
 export const MAX_ANON_BRANCHES = 3;
 
 /**
- * Count exploration branches rooted on the mainline. Each non-first
- * child of a mainline node is one branch (regardless of how deep
- * that branch goes).
+ * Number of exploration frames currently sitting on the stack above
+ * the mainline. Named `countExplorationBranches` for continuity with
+ * the pre-Phase-6 call sites — the semantic meaning "how many
+ * branches has the user opened" is preserved.
  */
 export function countExplorationBranches(tree: GameTree): number {
-  let count = 0;
-  for (const node of walkMainline(tree)) {
-    // childrenIds[0] is the mainline continuation; anything beyond
-    // that is a branch root.
-    if (node.childrenIds.length > 1) {
-      count += node.childrenIds.length - 1;
-    }
-  }
-  return count;
+  return stackDepth(tree);
 }

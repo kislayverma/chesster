@@ -13,6 +13,9 @@ import NavShell from './components/NavShell';
 import PlayPage from './pages/PlayPage';
 import DashboardPage from './pages/DashboardPage';
 import MistakesPage from './pages/MistakesPage';
+import SettingsPage from './pages/SettingsPage';
+import LoginPage from './pages/LoginPage';
+import OnboardingPage from './pages/OnboardingPage';
 
 export default function AppRoutes() {
   return (
@@ -21,6 +24,14 @@ export default function AppRoutes() {
         <Route index element={<PlayPage />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="mistakes" element={<MistakesPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+        {/*
+          Phase 9 auth routes. Rendered INSIDE NavShell so the header
+          stays consistent across the sign-in flow — pages themselves
+          render an empty main with their own card.
+        */}
+        <Route path="login" element={<LoginPage />} />
+        <Route path="onboarding" element={<OnboardingPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

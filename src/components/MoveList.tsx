@@ -1,39 +1,17 @@
 /**
- * Phase 4 MoveList.
+ * Phase 6 MoveList.
  *
- * Two-section layout:
- *
- *   1. Main game — the mainline chain (first-child walk from root),
- *      rendered as a two-column white/black grid like Phase 3.
- *
- *   2. Branches — for each exploration branch rooted on the mainline,
- *      a labelled block showing "from <n>. <san>: …" followed by the
- *      branch's moves. Sub-branches of branches are not listed in the
- *      Phase 4 UI (the tree still stores them; they're reachable by
- *      navigating into the branch and forking again).
+ * Renders only the mainline (frame 0). Exploration branches live in
+ * the StackPanel now — the Phase 4 "Branches" section is gone since
+ * popping is destructive and branches no longer hang around as
+ * siblings of the main game.
  *
  * All moves are clickable and call `goToNode` to jump the board.
  * The current node is highlighted.
  */
 
-import { Fragment } from 'react';
 import { useGameStore } from '../game/gameStore';
-import {
-  getNode,
-  walkMainline,
-  type MoveNode,
-} from '../game/gameTree';
-
-interface BranchDescriptor {
-  /** The branch's root node (the move that diverged from mainline). */
-  rootNode: MoveNode;
-  /** Full-move number where the branch diverged (on the mainline parent). */
-  branchFromFullmove: number;
-  /** Which side moved at the divergence point ('w' or 'b'). */
-  branchFromColor: 'w' | 'b';
-  /** The branch's chain (first-child walk starting at rootNode). */
-  chain: MoveNode[];
-}
+import { walkMainline, type MoveNode } from '../game/gameTree';
 
 export default function MoveList() {
   const tree = useGameStore((s) => s.tree);
@@ -56,29 +34,6 @@ export default function MoveList() {
       white: mainline[i],
       black: mainline[i + 1],
     });
-  }
-
-  // ---- Branches rooted on the mainline ----
-  const branches: BranchDescriptor[] = [];
-  for (const node of walkMainline(tree)) {
-    if (node.childrenIds.length <= 1) continue;
-    for (let i = 1; i < node.childrenIds.length; i++) {
-      const rootNode = getNode(tree, node.childrenIds[i]);
-      // Walk chain
-      const chain: MoveNode[] = [];
-      let cur: MoveNode | undefined = rootNode;
-      while (cur) {
-        chain.push(cur);
-        const nextId: string | undefined = cur.childrenIds[0];
-        cur = nextId ? tree.nodes.get(nextId) : undefined;
-      }
-      branches.push({
-        rootNode,
-        branchFromFullmove: Math.ceil(node.ply / 2) || 1,
-        branchFromColor: (node.moverColor ?? 'w') as 'w' | 'b',
-        chain,
-      });
-    }
   }
 
   const moveButtonClass = (nodeId: string): string => {
@@ -136,51 +91,6 @@ export default function MoveList() {
       {mainGameHeadId !== tree.rootId && (
         <div className="mt-1 text-[10px] uppercase tracking-wider text-slate-600">
           — main game head —
-        </div>
-      )}
-
-      {/* Branches */}
-      {branches.length > 0 && (
-        <div className="mt-4 border-t border-slate-800 pt-3">
-          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-amber-500/70">
-            Branches
-          </h3>
-          <ol className="space-y-2 font-mono text-xs">
-            {branches.map((b, idx) => {
-              const prefix =
-                b.branchFromColor === 'w'
-                  ? `${b.branchFromFullmove}…`
-                  : `${b.branchFromFullmove + 1}.`;
-              return (
-                <li
-                  key={b.rootNode.id}
-                  className="rounded border-l-2 border-amber-600/50 pl-2"
-                >
-                  <div className="mb-0.5 text-[10px] text-slate-500">
-                    Branch {idx + 1} · from {prefix}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {b.chain.map((node) => (
-                      <Fragment key={node.id}>
-                        {node.moverColor === 'w' && (
-                          <span className="text-slate-600">
-                            {Math.ceil(node.ply / 2)}.
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          className={moveButtonClass(node.id)}
-                          onClick={() => goToNode(node.id)}
-                        >
-                          {node.move}
-                        </button>
-                      </Fragment>
-                    ))}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
         </div>
       )}
 

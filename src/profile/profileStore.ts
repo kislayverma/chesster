@@ -23,6 +23,7 @@ import {
 import { buildProfileSummary } from './weaknessSelector';
 import type { PlayerProfile, WeaknessEvent } from './types';
 import type { ProfileSummary } from '../coach/types';
+import { pushProfileRemote } from '../sync/syncOrchestrator';
 
 const STORAGE_KEY = 'chesster:profile:v1';
 const SAVE_DEBOUNCE_MS = 500;
@@ -36,6 +37,14 @@ interface ProfileStore {
 
   /** Reset to an empty profile (local-device wipe). */
   clearProfile: () => void;
+
+  /**
+   * Replace the entire profile (used by the sync orchestrator after
+   * pulling a remote profile on sign-in). Writes through to IndexedDB
+   * synchronously via the debounced saver so a subsequent cold boot
+   * sees the hydrated copy.
+   */
+  replaceProfile: (next: PlayerProfile) => void;
 
   /** Append a classified-mistake event and refresh aggregates. */
   addWeaknessEvent: (event: WeaknessEvent) => void;
@@ -65,6 +74,8 @@ function scheduleSave(profile: PlayerProfile): void {
   saveTimer = setTimeout(() => {
     saveTimer = null;
     void saveProfile(profile);
+    // Best-effort dual-write to Supabase. No-op when anonymous.
+    pushProfileRemote(profile);
   }, SAVE_DEBOUNCE_MS);
 }
 
@@ -92,6 +103,18 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
     const empty = createEmptyProfile();
     set({ profile: empty });
     scheduleSave(empty);
+  },
+
+  replaceProfile: (next) => {
+    set({ profile: next, hydrated: true });
+    // Write straight through to IndexedDB — we JUST pulled this from
+    // Supabase, so bouncing it back through `scheduleSave` would
+    // trigger a pointless remote round-trip.
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    void saveProfile(next);
   },
 
   addWeaknessEvent: (event) => {
