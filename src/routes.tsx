@@ -11,7 +11,6 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import NavShell from './components/NavShell';
 import HomePage from './pages/HomePage';
 import PlayPage from './pages/PlayPage';
-import DashboardPage from './pages/DashboardPage';
 import MistakesPage from './pages/MistakesPage';
 import PracticePage from './pages/PracticePage';
 import LibraryPage from './pages/LibraryPage';
@@ -27,7 +26,6 @@ export default function AppRoutes() {
       <Route element={<NavShell />}>
         <Route index element={<HomePage />} />
         <Route path="play" element={<PlayPage />} />
-        <Route path="dashboard" element={<DashboardPage />} />
         <Route path="mistakes" element={<MistakesPage />} />
         <Route path="practice" element={<PracticePage />} />
         <Route path="library" element={<LibraryPage />} />

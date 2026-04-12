@@ -210,7 +210,7 @@ function JourneyLadder({ currentLevel }: { currentLevel?: string }) {
   return (
     <section className="w-full max-w-2xl rounded-lg border border-slate-800 bg-slate-900/40 p-5">
       <h2 className="mb-4 text-center text-sm font-semibold uppercase tracking-wider text-slate-500">
-        The Journey
+        Your Journey
       </h2>
       <div className="flex items-start justify-between gap-1">
         {ALL_LEVELS.map((level, i) => {

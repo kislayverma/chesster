@@ -178,6 +178,7 @@ export default function ProfilePage() {
           </div>
         </section>
       )}
+
     </main>
   );
 }

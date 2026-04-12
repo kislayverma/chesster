@@ -22,7 +22,6 @@ import { useAuthStore } from '../auth/authStore';
 const NAV_LINKS: Array<{ to: string; label: string }> = [
   { to: '/', label: 'Home' },
   { to: '/play', label: 'Play' },
-  { to: '/dashboard', label: 'Dashboard' },
   { to: '/mistakes', label: 'Mistakes' },
   { to: '/practice', label: 'Practice' },
   { to: '/library', label: 'Library' },
