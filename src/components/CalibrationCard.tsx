@@ -12,7 +12,7 @@ export default function CalibrationCard() {
 
   if (!journey || journey.calibrated) return null;
 
-  const played = journey.calibrationGamesPlayed;
+  const played = journey.calibrationGamesPlayed ?? 0;
   const remaining = CALIBRATION_GAMES - played;
 
   return (

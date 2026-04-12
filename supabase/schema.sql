@@ -43,6 +43,7 @@ create table if not exists public.profiles (
   phase_cp_loss jsonb not null default '{"opening":0,"middlegame":0,"endgame":0}'::jsonb,
   opening_weaknesses jsonb not null default '{}'::jsonb,
   acpl_history jsonb not null default '[]'::jsonb,
+  journey_state jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
