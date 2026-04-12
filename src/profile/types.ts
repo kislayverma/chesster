@@ -71,6 +71,8 @@ export interface OpeningStat {
  * finish and mistake review.  See DESIGN.md §17 for full spec.
  */
 export interface JourneyState {
+  /** Display name chosen during onboarding. */
+  displayName?: string;
   /** Number of calibration games completed (0, 1, or 2). */
   calibrationGamesPlayed: number;
   /** True once the player has finished 2 calibration games. */

@@ -63,6 +63,9 @@ interface ProfileStore {
   /** Credit a mistake review for journey progress. */
   recordMistakeReview: () => void;
 
+  /** Set the player's display name (from onboarding). */
+  setDisplayName: (name: string) => void;
+
   /** Trimmed projection sent to the coach for personalization. */
   getProfileSummary: () => ProfileSummary;
 }
@@ -193,6 +196,19 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
     };
     set({ profile: next });
     scheduleSave(next);
+  },
+
+  setDisplayName: (name) => {
+    const profile = get().profile;
+    const journeyState = profile.journeyState ?? createEmptyJourneyState();
+    const next: PlayerProfile = {
+      ...profile,
+      journeyState: { ...journeyState, displayName: name },
+      updatedAt: Date.now(),
+    };
+    set({ profile: next });
+    void saveProfile(next);
+    pushProfileRemote(next);
   },
 
   getProfileSummary: () => buildProfileSummary(get().profile),

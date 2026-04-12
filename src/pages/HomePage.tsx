@@ -3,16 +3,25 @@
  *
  *   1. Not logged in → generic hero + feature cards.
  *   2. Logged in, not calibrated → journey pitch + level ladder + CTA.
- *   3. Logged in, calibrated → JourneyCard + stats + feature cards.
+ *   3. Logged in, calibrated → greeting + level badge + progress bar + play CTA.
  */
 
 import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../auth/authStore';
 import { useProfileStore } from '../profile/profileStore';
-import { acplToRating, ratingStanding, ALL_LEVELS } from '../lib/rating';
-import JourneyCard from '../components/JourneyCard';
+import { acplToRating, ratingStanding, ALL_LEVELS, getLevelDef, nextLevel } from '../lib/rating';
 import PromotionBanner from '../components/PromotionBanner';
 import CalibrationCard from '../components/CalibrationCard';
+
+/** Chess piece Unicode for each level. */
+const LEVEL_PIECES: Record<string, string> = {
+  newcomer: '\u2659',        // pawn
+  learner: '\u2658',         // knight
+  clubPlayer: '\u2657',      // bishop
+  competitor: '\u2656',      // rook
+  advancedThinker: '\u2655', // queen
+  expert: '\u2654',          // king
+};
 
 export default function HomePage() {
   const authStatus = useAuthStore((s) => s.status);
@@ -64,25 +73,60 @@ export default function HomePage() {
 
   // ── State 3: Logged in, calibrated ──────────────────────────────
   if (calibrated) {
+    const name = journey?.displayName || 'there';
+    const hour = new Date().getHours();
+    const greeting =
+      hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+    const levelDef = getLevelDef(journey?.currentLevel ?? 'newcomer');
+    const next = nextLevel(journey?.currentLevel ?? 'newcomer');
+    const progress = journey?.levelProgress ?? 0;
+
     return (
-      <main className="mx-auto flex max-w-3xl flex-1 flex-col gap-8 p-6">
+      <main className="mx-auto flex max-w-2xl flex-1 flex-col items-center justify-center gap-8 p-6">
         <PromotionBanner />
-        <JourneyCard />
 
-        {/* Quick stats */}
-        {totalGames > 0 && (
-          <section className="grid grid-cols-3 gap-4">
-            <StatCard label="Games played" value={String(totalGames)} />
-            <StatCard label="Moves analyzed" value={String(totalMoves)} />
-            <StatCard
-              label="Latest Rating"
-              value={latestRating != null ? String(latestRating) : '—'}
-              subtitle={latestStanding ?? undefined}
+        {/* Greeting */}
+        <h1 className="text-3xl font-extrabold tracking-tight text-slate-100">
+          {greeting}, {name}
+        </h1>
+
+        {/* Current level */}
+        <div className="flex flex-col items-center gap-2">
+          <span className="text-5xl leading-none">
+            {LEVEL_PIECES[levelDef.key] ?? '\u2659'}
+          </span>
+          <span className="text-lg font-semibold text-slate-200">
+            {levelDef.name}
+          </span>
+          <span className="text-xs text-slate-500">
+            ~{journey?.rollingRating ?? 0} Elo
+          </span>
+        </div>
+
+        {/* Progress bar */}
+        <div className="w-full max-w-sm">
+          <div className="mb-1 flex items-center justify-between text-xs text-slate-400">
+            <span>{levelDef.name}</span>
+            <span>{next ? next.name : 'Max level'}</span>
+          </div>
+          <div className="h-3 rounded-full bg-slate-800">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all"
+              style={{ width: `${Math.min(100, progress)}%` }}
             />
-          </section>
-        )}
+          </div>
+          <p className="mt-1 text-center text-xs text-slate-500">
+            {next ? `${progress}% to ${next.name}` : 'You\'ve reached the top!'}
+          </p>
+        </div>
 
-        <FeatureCards />
+        {/* Play CTA */}
+        <NavLink
+          to="/play"
+          className="rounded-lg bg-emerald-600 px-8 py-3 text-lg font-semibold text-white shadow-lg hover:bg-emerald-500 transition-colors"
+        >
+          Play a game
+        </NavLink>
       </main>
     );
   }
@@ -171,16 +215,6 @@ function StatCard({
     </div>
   );
 }
-
-/** Chess piece SVGs for each level (white pieces on dark bg). */
-const LEVEL_PIECES: Record<string, string> = {
-  newcomer: '\u2659',        // white pawn
-  learner: '\u2658',         // white knight
-  clubPlayer: '\u2657',      // white bishop
-  competitor: '\u2656',      // white rook
-  advancedThinker: '\u2655', // white queen
-  expert: '\u2654',          // white king
-};
 
 function JourneyLadder() {
   return (

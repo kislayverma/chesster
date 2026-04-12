@@ -25,6 +25,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../auth/authStore';
+import { useProfileStore } from '../profile/profileStore';
 import {
   declineMigration,
   runMigration,
@@ -53,6 +54,8 @@ export default function OnboardingPage() {
   }, [location.search]);
 
   const [state, setState] = useState<UiState>({ kind: 'loading' });
+  const [displayName, setDisplayName] = useState('');
+  const saveDisplayName = useProfileStore((s) => s.setDisplayName);
 
   // Bounce unauthenticated / unconfigured visitors to /login.
   useEffect(() => {
@@ -73,15 +76,8 @@ export default function OnboardingPage() {
         summary.localEventCount === 0 &&
         !summary.hasLocalProfile
       ) {
-        // Nothing to migrate — mark claimed, pull whatever already
-        // exists on the server for this user (fresh device scenario),
-        // then continue to the requested landing page.
+        // Nothing to migrate — show name prompt before continuing.
         setState({ kind: 'empty' });
-        void (async () => {
-          await declineMigration(user.id);
-          await hydrateFromRemote(user.id);
-          if (!cancelled) navigate(nextParam, { replace: true });
-        })();
       } else {
         setState({ kind: 'prompt', summary });
       }
@@ -91,8 +87,15 @@ export default function OnboardingPage() {
     };
   }, [status, user, nextParam, navigate]);
 
+  /** Save the name, then proceed with the given action. */
+  const persistName = () => {
+    const trimmed = displayName.trim();
+    if (trimmed) saveDisplayName(trimmed);
+  };
+
   const onMigrate = async () => {
     if (!user) return;
+    persistName();
     setState({ kind: 'working' });
     const result = await runMigration();
     if (!result.ok) {
@@ -102,33 +105,69 @@ export default function OnboardingPage() {
       });
       return;
     }
-    // Local state matches what we just uploaded, but the user may
-    // also have data from a previous device — pull it down before
-    // redirecting.
     await hydrateFromRemote(user.id);
     setState({
       kind: 'success',
       games: result.counts.games,
       events: result.counts.weaknessEvents,
     });
-    // Wait a beat so the user sees the confirmation, then redirect.
     setTimeout(() => navigate(nextParam, { replace: true }), 1500);
   };
 
   const onSkip = async () => {
     if (!user) return;
+    persistName();
     setState({ kind: 'working' });
     await declineMigration(user.id);
-    // Pull any existing remote data for this account (the user may
-    // have played on another device already).
     await hydrateFromRemote(user.id);
     navigate(nextParam, { replace: true });
   };
 
-  if (state.kind === 'loading' || state.kind === 'empty') {
+  const onContinueEmpty = async () => {
+    if (!user) return;
+    persistName();
+    setState({ kind: 'loading' });
+    await declineMigration(user.id);
+    await hydrateFromRemote(user.id);
+    navigate(nextParam, { replace: true });
+  };
+
+  if (state.kind === 'loading') {
     return (
       <main className="flex flex-1 flex-col items-center justify-center p-6">
         <p className="text-sm text-slate-400">Setting up your account…</p>
+      </main>
+    );
+  }
+
+  if (state.kind === 'empty') {
+    return (
+      <main className="flex flex-1 flex-col items-center justify-center p-6">
+        <section className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900/40 p-6">
+          <h1 className="text-xl font-bold text-slate-100">Welcome to Chesster</h1>
+          <p className="mt-2 text-sm leading-relaxed text-slate-400">
+            What should we call you?
+          </p>
+          <input
+            type="text"
+            autoFocus
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && displayName.trim()) void onContinueEmpty();
+            }}
+            placeholder="Your name"
+            className="mt-3 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-amber-500 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={onContinueEmpty}
+            disabled={!displayName.trim()}
+            className="mt-4 rounded bg-amber-600 px-5 py-2 text-sm font-medium text-slate-950 hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Continue
+          </button>
+        </section>
       </main>
     );
   }
@@ -154,6 +193,17 @@ export default function OnboardingPage() {
       <section className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900/40 p-6">
         <h1 className="text-xl font-bold text-slate-100">Welcome to Chesster</h1>
         <p className="mt-2 text-sm leading-relaxed text-slate-400">
+          What should we call you?
+        </p>
+        <input
+          type="text"
+          autoFocus
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          placeholder="Your name"
+          className="mt-3 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-amber-500 focus:outline-none"
+        />
+        <p className="mt-4 text-sm leading-relaxed text-slate-400">
           You've been playing anonymously on this device. Want to link those
           games and weakness stats to your new account?
         </p>
