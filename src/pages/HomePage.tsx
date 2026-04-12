@@ -3,7 +3,7 @@
  *
  *   1. Not logged in → generic hero + feature cards.
  *   2. Logged in, not calibrated → journey pitch + level ladder + CTA.
- *   3. Logged in, calibrated → greeting + level badge + progress bar + play CTA.
+ *   3. Logged in, calibrated → greeting + full journey ladder (current highlighted) + progress bar + play CTA.
  */
 
 import { NavLink } from 'react-router-dom';
@@ -82,7 +82,7 @@ export default function HomePage() {
     const progress = journey?.levelProgress ?? 0;
 
     return (
-      <main className="mx-auto flex max-w-2xl flex-1 flex-col items-center justify-center gap-8 p-6">
+      <main className="mx-auto flex max-w-3xl flex-1 flex-col items-center justify-center gap-8 p-6">
         <PromotionBanner />
 
         {/* Greeting */}
@@ -90,18 +90,8 @@ export default function HomePage() {
           {greeting}, {name}
         </h1>
 
-        {/* Current level */}
-        <div className="flex flex-col items-center gap-2">
-          <span className="text-5xl leading-none">
-            {LEVEL_PIECES[levelDef.key] ?? '\u2659'}
-          </span>
-          <span className="text-lg font-semibold text-slate-200">
-            {levelDef.name}
-          </span>
-          <span className="text-xs text-slate-500">
-            ~{journey?.rollingRating ?? 0} Elo
-          </span>
-        </div>
+        {/* Full journey ladder with current level highlighted */}
+        <JourneyLadder currentLevel={levelDef.key} />
 
         {/* Progress bar */}
         <div className="w-full max-w-sm">
@@ -216,32 +206,47 @@ function StatCard({
   );
 }
 
-function JourneyLadder() {
+function JourneyLadder({ currentLevel }: { currentLevel?: string }) {
   return (
-    <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+    <section className="w-full max-w-2xl rounded-lg border border-slate-800 bg-slate-900/40 p-5">
       <h2 className="mb-4 text-center text-sm font-semibold uppercase tracking-wider text-slate-500">
         The Journey
       </h2>
       <div className="flex items-start justify-between gap-1">
-        {ALL_LEVELS.map((level, i) => (
-          <div key={level.key} className="flex flex-1 flex-col items-center gap-1">
-            {/* Piece */}
-            <span className="text-3xl leading-none text-slate-400 sm:text-4xl">
-              {LEVEL_PIECES[level.key] ?? '?'}
-            </span>
-            {/* Connector line (except after the last) */}
-            {i < ALL_LEVELS.length - 1 && (
-              <div className="absolute" />
-            )}
-            {/* Label */}
-            <span className="text-[11px] font-semibold text-slate-200 text-center leading-tight">
-              {level.name}
-            </span>
-            <span className="text-[10px] text-slate-500">
-              {level.floor > 0 ? `${level.floor}+` : '< 900'}
-            </span>
-          </div>
-        ))}
+        {ALL_LEVELS.map((level, i) => {
+          const isCurrent = level.key === currentLevel;
+          return (
+            <div key={level.key} className="flex flex-1 flex-col items-center gap-1">
+              {/* Piece */}
+              <span
+                className={`leading-none transition-all ${
+                  isCurrent
+                    ? 'text-5xl text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]'
+                    : 'text-3xl text-slate-600 sm:text-4xl'
+                }`}
+              >
+                {LEVEL_PIECES[level.key] ?? '?'}
+              </span>
+              {/* Connector line (except after the last) */}
+              {i < ALL_LEVELS.length - 1 && (
+                <div className="absolute" />
+              )}
+              {/* Label */}
+              <span
+                className={`text-center leading-tight font-semibold ${
+                  isCurrent
+                    ? 'text-xs text-emerald-300'
+                    : 'text-[11px] text-slate-500'
+                }`}
+              >
+                {level.name}
+              </span>
+              <span className={`text-[10px] ${isCurrent ? 'text-slate-400' : 'text-slate-600'}`}>
+                {level.floor > 0 ? `${level.floor}+` : '< 900'}
+              </span>
+            </div>
+          );
+        })}
       </div>
       {/* Connecting track */}
       <div className="mx-auto mt-1 flex items-center px-[8%]">
