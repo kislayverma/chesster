@@ -91,7 +91,7 @@ export default function MistakesPage() {
   const dateGroups = useMemo(() => groupByDate(filtered), [filtered]);
 
   return (
-    <main className="mx-auto flex max-w-4xl flex-1 flex-col gap-6 p-6">
+    <main className="mx-auto flex max-w-4xl flex-1 flex-col gap-4 p-3 md:gap-6 md:p-6">
       <header>
         <h1 className="text-2xl font-bold text-slate-100">Mistakes</h1>
         <p className="text-sm text-slate-400">
@@ -170,7 +170,7 @@ export default function MistakesPage() {
                           <span className="text-slate-500">
                             {formatTime(e.timestamp)}
                           </span>
-                          <span className="text-slate-600 opacity-0 transition-opacity group-hover:opacity-100">
+                          <span className="text-slate-600 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                             Review &rarr;
                           </span>
                         </span>

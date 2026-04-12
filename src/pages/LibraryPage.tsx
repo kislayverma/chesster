@@ -121,7 +121,7 @@ export default function LibraryPage() {
   const dateGroups = useMemo(() => groupByDate(games), [games]);
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-1 flex-col gap-6 p-6">
+    <main className="mx-auto flex max-w-3xl flex-1 flex-col gap-4 p-3 md:gap-6 md:p-6">
       <header>
         <h1 className="text-2xl font-bold tracking-tight text-slate-100">
           Game Library
@@ -185,12 +185,12 @@ export default function LibraryPage() {
                             onClick={(e) =>
                               void handleResume(g.id, g.humanColor, g.engineEnabled, e)
                             }
-                            className="rounded bg-emerald-700/60 px-2 py-0.5 text-xs font-medium text-emerald-200 opacity-0 transition-opacity hover:bg-emerald-600/60 group-hover:opacity-100"
+                            className="rounded bg-emerald-700/60 px-2 py-0.5 text-xs font-medium text-emerald-200 sm:opacity-0 sm:transition-opacity hover:bg-emerald-600/60 sm:group-hover:opacity-100"
                           >
                             Resume
                           </button>
                         ) : (
-                          <span className="text-xs text-slate-500 opacity-0 transition-opacity group-hover:opacity-100">
+                          <span className="text-xs text-slate-500 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                             Review &rarr;
                           </span>
                         )}
@@ -198,7 +198,7 @@ export default function LibraryPage() {
                           type="button"
                           onClick={(e) => void handleDelete(g.id, e)}
                           title="Delete game"
-                          className="rounded p-1 text-xs text-slate-600 opacity-0 transition-opacity hover:bg-slate-800 hover:text-rose-400 group-hover:opacity-100"
+                          className="rounded p-1 text-xs text-slate-600 sm:opacity-0 sm:transition-opacity hover:bg-slate-800 hover:text-rose-400 sm:group-hover:opacity-100"
                         >
                           &times;
                         </button>

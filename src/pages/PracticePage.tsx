@@ -220,7 +220,7 @@ export default function PracticePage() {
   const fen = phase === 'presenting' ? card!.fen : (chess?.fen() ?? card!.fen);
 
   return (
-    <main className="flex flex-1 flex-col items-center gap-6 p-6">
+    <main className="flex flex-1 flex-col items-center gap-4 p-3 md:gap-6 md:p-6">
       {/* Header */}
       <div className="flex w-full max-w-[480px] items-center justify-between">
         <h2 className="text-sm font-semibold text-slate-200">

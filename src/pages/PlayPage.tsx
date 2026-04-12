@@ -9,7 +9,6 @@
 import { useEffect } from 'react';
 import Board from '../components/Board';
 import CoachPanel from '../components/CoachPanel';
-import EvalBar from '../components/EvalBar';
 import MoveList from '../components/MoveList';
 import PracticePrompt from '../components/PracticePrompt';
 import StackPanel from '../components/StackPanel';
@@ -70,18 +69,17 @@ export default function PlayPage() {
   }, [goBack, goForward]);
 
   return (
-    <main className="grid flex-1 grid-cols-1 gap-6 p-6 lg:grid-cols-[auto_auto_320px]">
-      <section className="flex flex-col items-center gap-4">
+    <main className="grid flex-1 grid-cols-1 gap-3 p-3 lg:gap-6 lg:p-6 lg:grid-cols-[auto_auto_320px]">
+      {/* Column 1: Board + controls */}
+      <section className="flex flex-col items-center gap-3 lg:gap-4">
         <PracticePrompt />
-        <div className="flex items-start gap-4">
-          <EvalBar orientation={boardOrientation} />
-          <div className="w-[480px] max-w-[calc(100vw-8rem)]">
-            <Board orientation={boardOrientation} />
-          </div>
+        <div className="w-full max-w-[480px]">
+          <Board orientation={boardOrientation} />
         </div>
 
-        <div className="flex w-[480px] max-w-[calc(100vw-8rem)] flex-wrap items-center justify-center gap-3 text-sm">
-          <span className="truncate rounded bg-slate-800 px-3 py-1 text-center text-slate-300">
+        {/* Controls — right under the board */}
+        <div className="flex w-full max-w-[480px] flex-wrap items-center justify-center gap-2 text-xs lg:gap-3 lg:text-sm">
+          <span className="truncate rounded bg-slate-800 px-2 py-1 text-center text-slate-300 lg:px-3">
             {statusLine}
           </span>
 
@@ -91,7 +89,7 @@ export default function PlayPage() {
             onClick={goBack}
             disabled={historyLength === 0}
             title="Previous move (Left arrow)"
-            className="rounded bg-slate-800 px-3 py-1 text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded bg-slate-800 px-2 py-1 text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 lg:px-3"
           >
             &larr;
           </button>
@@ -100,7 +98,7 @@ export default function PlayPage() {
             onClick={goForward}
             disabled={!canGoForward}
             title="Next move (Right arrow)"
-            className="rounded bg-slate-800 px-3 py-1 text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded bg-slate-800 px-2 py-1 text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 lg:px-3"
           >
             &rarr;
           </button>
@@ -109,7 +107,7 @@ export default function PlayPage() {
             type="button"
             onClick={undo}
             disabled={historyLength === 0}
-            className="rounded bg-slate-800 px-3 py-1 text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded bg-slate-800 px-2 py-1 text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 lg:px-3"
           >
             Undo
           </button>
@@ -119,7 +117,7 @@ export default function PlayPage() {
               onClick={() => {
                 if (confirm('Resign this game?')) resign();
               }}
-              className="rounded bg-rose-900/60 px-3 py-1 text-rose-200 hover:bg-rose-800/60"
+              className="rounded bg-rose-900/60 px-2 py-1 text-rose-200 hover:bg-rose-800/60 lg:px-3"
             >
               Resign
             </button>
@@ -127,15 +125,26 @@ export default function PlayPage() {
           <button
             type="button"
             onClick={reset}
-            className="rounded bg-slate-800 px-3 py-1 text-slate-200 hover:bg-slate-700"
+            className="rounded bg-slate-800 px-2 py-1 text-slate-200 hover:bg-slate-700 lg:px-3"
           >
             New game
           </button>
         </div>
+
+        {/* Coach panel — visible after controls on mobile, hidden on desktop (shown in sidebar) */}
+        <div className="w-full max-w-[480px] lg:hidden">
+          <CoachPanel />
+        </div>
+
+        {/* Stack panel — after coach on mobile, moves to column 3 on desktop */}
+        <div className="w-full max-w-[480px] lg:hidden">
+          <StackPanel />
+        </div>
       </section>
 
-      <aside className="flex flex-col gap-4 lg:w-64">
-        <div className="rounded border border-slate-800 bg-slate-900/40 p-4">
+      {/* Column 2: Settings + Coach (desktop) + Moves */}
+      <aside className="flex flex-col gap-3 lg:gap-4 lg:w-64">
+        <div className="rounded border border-slate-800 bg-slate-900/40 p-3 lg:p-4">
           <h2 className="mb-3 text-sm font-semibold text-slate-200">
             Game settings
           </h2>
@@ -191,14 +200,18 @@ export default function PlayPage() {
           </div>
         </div>
 
-        <CoachPanel />
+        {/* Coach panel — desktop only (mobile version is above, right after board) */}
+        <div className="hidden lg:block">
+          <CoachPanel />
+        </div>
 
         <div className="min-h-[240px] flex-1">
           <MoveList />
         </div>
       </aside>
 
-      <div className="lg:w-[320px]">
+      {/* Column 3: Stack panel — desktop only (mobile version is inline after coach) */}
+      <div className="hidden lg:block lg:w-[320px]">
         <StackPanel />
       </div>
     </main>

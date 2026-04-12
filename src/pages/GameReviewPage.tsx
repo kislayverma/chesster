@@ -221,7 +221,7 @@ export default function GameReviewPage() {
   };
 
   return (
-    <main className={`grid flex-1 grid-cols-1 gap-6 p-6 ${
+    <main className={`grid flex-1 grid-cols-1 gap-3 p-3 lg:gap-6 lg:p-6 ${
       gameMistakes.length > 0
         ? 'lg:grid-cols-[auto_260px_260px]'
         : 'lg:grid-cols-[auto_320px]'
@@ -235,7 +235,7 @@ export default function GameReviewPage() {
           &larr; Back to library
         </NavLink>
 
-        <div className="w-[480px] max-w-[calc(100vw-4rem)]">
+        <div className="w-full max-w-[480px]">
           <Chessboard
             position={fen}
             boardOrientation={boardOrientation}

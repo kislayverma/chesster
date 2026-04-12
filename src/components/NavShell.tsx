@@ -4,11 +4,8 @@
  * Page-level chrome: logo, nav links, right-side badges. Wraps the
  * routed page content via React Router's <Outlet />.
  *
- * The LLM badge is now live — it subscribes to `subscribeLlmMode` and
- * re-renders whenever the feature-flag module reports a mode change
- * (health probe lands, BYOK key saved/cleared, invalid-key rejection).
- * Clicking the badge jumps to /settings so users can get to the BYOK
- * input with one click.
+ * On mobile (<lg) the nav links collapse into a hamburger menu that
+ * opens a vertical dropdown. The logo and auth menu stay visible.
  */
 
 import { NavLink, Outlet } from 'react-router-dom';
@@ -44,22 +41,90 @@ const LLM_BADGE_CLASSES: Record<LlmMode, string> = {
 export default function NavShell() {
   const depth = useGameStore((s) => stackDepth(s.tree));
   const [llmMode, setLlmMode] = useState<LlmMode>(getLlmMode());
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => subscribeLlmMode(setLlmMode), []);
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="flex items-center justify-between border-b border-slate-800 px-6 py-3">
-        <div className="flex items-baseline gap-6">
-          <h1 className="text-xl font-bold tracking-tight">Chesster</h1>
-          <nav className="flex items-center gap-1 text-sm">
+      <header className="border-b border-slate-800 px-4 py-3 lg:px-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4 lg:items-baseline lg:gap-6">
+            <h1 className="text-xl font-bold tracking-tight">Chesster</h1>
+
+            {/* Desktop nav */}
+            <nav className="hidden items-center gap-1 text-sm lg:flex">
+              {NAV_LINKS.map((link) => (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  end={link.to === '/'}
+                  className={({ isActive }) =>
+                    `rounded px-3 py-1 ${
+                      isActive
+                        ? 'bg-slate-800 text-slate-100'
+                        : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                    }`
+                  }
+                >
+                  {link.label}
+                </NavLink>
+              ))}
+            </nav>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Badges — hidden on mobile, shown on desktop */}
+            <span
+              className="hidden rounded bg-slate-800 px-2 py-1 text-xs text-slate-300 lg:inline-block"
+              title="Exploration frames on top of the mainline. Anonymous users are capped; sign in for unlimited."
+            >
+              Stack: {depth}/{MAX_ANON_BRANCHES}
+            </span>
+            <NavLink
+              to="/settings"
+              title="Click to manage your Anthropic API key"
+              className={`hidden rounded px-2 py-1 text-xs transition-colors lg:inline-block ${LLM_BADGE_CLASSES[llmMode]}`}
+            >
+              {LLM_BADGE_LABELS[llmMode]}
+            </NavLink>
+            <AuthMenu />
+
+            {/* Hamburger button — mobile only */}
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200 lg:hidden"
+              aria-label="Toggle menu"
+            >
+              <svg
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+              >
+                {menuOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile dropdown menu */}
+        {menuOpen && (
+          <nav className="mt-3 flex flex-col gap-1 border-t border-slate-800 pt-3 lg:hidden">
             {NAV_LINKS.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}
                 end={link.to === '/'}
+                onClick={() => setMenuOpen(false)}
                 className={({ isActive }) =>
-                  `rounded px-3 py-1 ${
+                  `rounded px-3 py-2 text-sm ${
                     isActive
                       ? 'bg-slate-800 text-slate-100'
                       : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
@@ -69,25 +134,21 @@ export default function NavShell() {
                 {link.label}
               </NavLink>
             ))}
+            {/* Mobile-only badges */}
+            <div className="mt-2 flex items-center gap-2 border-t border-slate-800 px-3 pt-3">
+              <span className="rounded bg-slate-800 px-2 py-1 text-xs text-slate-300">
+                Stack: {depth}/{MAX_ANON_BRANCHES}
+              </span>
+              <NavLink
+                to="/settings"
+                onClick={() => setMenuOpen(false)}
+                className={`rounded px-2 py-1 text-xs transition-colors ${LLM_BADGE_CLASSES[llmMode]}`}
+              >
+                {LLM_BADGE_LABELS[llmMode]}
+              </NavLink>
+            </div>
           </nav>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span
-            className="rounded bg-slate-800 px-2 py-1 text-xs text-slate-300"
-            title="Exploration frames on top of the mainline. Anonymous users are capped; sign in for unlimited."
-          >
-            Stack: {depth}/{MAX_ANON_BRANCHES}
-          </span>
-          <NavLink
-            to="/settings"
-            title="Click to manage your Anthropic API key"
-            className={`rounded px-2 py-1 text-xs transition-colors ${LLM_BADGE_CLASSES[llmMode]}`}
-          >
-            {LLM_BADGE_LABELS[llmMode]}
-          </NavLink>
-          <AuthMenu />
-        </div>
+        )}
       </header>
 
       <Outlet />
@@ -131,14 +192,14 @@ function AuthMenu() {
       <div className="flex items-center gap-2">
         {syncing && (
           <span
-            className="rounded bg-amber-900/40 px-2 py-1 text-xs text-amber-200"
+            className="hidden rounded bg-amber-900/40 px-2 py-1 text-xs text-amber-200 sm:inline-block"
             title="Downloading your remote profile"
           >
             Syncing…
           </span>
         )}
         <span
-          className="max-w-[14ch] truncate rounded bg-slate-800 px-2 py-1 text-xs text-slate-200"
+          className="hidden max-w-[14ch] truncate rounded bg-slate-800 px-2 py-1 text-xs text-slate-200 sm:inline-block"
           title={user?.email ?? undefined}
         >
           {user?.email ?? 'Signed in'}

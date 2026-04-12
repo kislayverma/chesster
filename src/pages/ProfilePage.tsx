@@ -44,7 +44,7 @@ export default function ProfilePage() {
 
   if (!hydrated) {
     return (
-      <main className="flex flex-1 items-center justify-center p-6">
+      <main className="flex flex-1 items-center justify-center p-3 md:p-6">
         <p className="text-sm text-slate-500">Loading profile...</p>
       </main>
     );
@@ -55,7 +55,7 @@ export default function ProfilePage() {
 
   if (totalGames === 0) {
     return (
-      <main className="mx-auto flex max-w-3xl flex-1 flex-col items-center justify-center gap-4 p-6">
+      <main className="mx-auto flex max-w-3xl flex-1 flex-col items-center justify-center gap-4 p-3 md:p-6">
         <p className="text-sm text-slate-400">
           No games yet. Play a game to start building your profile.
         </p>
@@ -100,8 +100,8 @@ export default function ProfilePage() {
   };
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-1 flex-col gap-6 p-6">
-      <header className="flex items-baseline justify-between">
+    <main className="mx-auto flex max-w-3xl flex-1 flex-col gap-4 p-3 md:gap-6 md:p-6">
+      <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-100">
             Profile
@@ -158,7 +158,7 @@ export default function ProfilePage() {
         <h2 className="mb-3 text-sm font-semibold text-slate-200">
           Estimated Rating by Phase
         </h2>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
           <PhaseBar label="Opening" rating={phaseRatings.opening} />
           <PhaseBar label="Middlegame" rating={phaseRatings.middlegame} />
           <PhaseBar label="Endgame" rating={phaseRatings.endgame} />

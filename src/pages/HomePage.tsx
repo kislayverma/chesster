@@ -45,7 +45,7 @@ export default function HomePage() {
   // ── State 2: Logged in, not yet calibrated ──────────────────────
   if (inCalibration) {
     return (
-      <main className="mx-auto flex max-w-4xl flex-1 flex-col gap-10 p-6">
+      <main className="mx-auto flex max-w-4xl flex-1 flex-col gap-6 p-3 md:gap-10 md:p-6">
         {/* Hero row: heading + calibration card side by side */}
         <section className="flex flex-col gap-6 sm:flex-row sm:items-start sm:gap-8">
           <div className="flex-1">
@@ -82,7 +82,7 @@ export default function HomePage() {
     const progress = journey?.levelProgress ?? 0;
 
     return (
-      <main className="mx-auto flex max-w-3xl flex-1 flex-col items-center justify-center gap-8 p-6">
+      <main className="mx-auto flex max-w-3xl flex-1 flex-col items-center justify-center gap-6 p-3 md:gap-8 md:p-6">
         <PromotionBanner />
 
         {/* Greeting */}
@@ -123,7 +123,7 @@ export default function HomePage() {
 
   // ── State 1: Not logged in (default) ────────────────────────────
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-10 p-6">
+    <main className="flex flex-1 flex-col items-center justify-center gap-6 p-3 md:gap-10 md:p-6">
       {/* Hero */}
       <section className="flex max-w-xl flex-col items-center gap-4 text-center">
         <h1 className="text-4xl font-extrabold tracking-tight text-slate-100">
@@ -143,7 +143,7 @@ export default function HomePage() {
 
       {/* Quick stats */}
       {totalGames > 0 && (
-        <section className="grid w-full max-w-lg grid-cols-3 gap-4">
+        <section className="grid w-full max-w-lg grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
           <StatCard label="Games played" value={String(totalGames)} />
           <StatCard label="Moves analyzed" value={String(totalMoves)} />
           <StatCard

@@ -85,8 +85,8 @@ export default function LoginPage() {
 
   if (status === 'unconfigured') {
     return (
-      <main className="flex flex-1 flex-col items-center justify-center p-6">
-        <section className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900/40 p-6 text-center">
+      <main className="flex flex-1 flex-col items-center justify-center p-3 md:p-6">
+        <section className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900/40 p-4 text-center md:p-6">
           <h1 className="text-xl font-bold text-slate-100">Sign-in unavailable</h1>
           <p className="mt-3 text-sm leading-relaxed text-slate-400">
             This deployment was built without Supabase credentials, so cross-device
@@ -106,8 +106,8 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center p-6">
-      <section className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900/40 p-6">
+    <main className="flex flex-1 flex-col items-center justify-center p-3 md:p-6">
+      <section className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900/40 p-4 md:p-6">
         <h1 className="text-xl font-bold text-slate-100">Sign in</h1>
         <p className="mt-2 text-sm leading-relaxed text-slate-400">
           We'll email you a one-time magic link. No password, no tracking — just a

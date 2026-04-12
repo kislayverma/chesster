@@ -154,7 +154,7 @@ export default function OnboardingPage() {
 
   if (state.kind === 'loading') {
     return (
-      <main className="flex flex-1 flex-col items-center justify-center p-6">
+      <main className="flex flex-1 flex-col items-center justify-center p-3 md:p-6">
         <p className="text-sm text-slate-400">Setting up your account…</p>
       </main>
     );
@@ -162,8 +162,8 @@ export default function OnboardingPage() {
 
   if (state.kind === 'empty') {
     return (
-      <main className="flex flex-1 flex-col items-center justify-center p-6">
-        <section className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900/40 p-6">
+      <main className="flex flex-1 flex-col items-center justify-center p-3 md:p-6">
+        <section className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900/40 p-4 md:p-6">
           <h1 className="text-xl font-bold text-slate-100">Welcome to Chesster</h1>
           <p className="mt-2 text-sm leading-relaxed text-slate-400">
             What should we call you?
@@ -194,8 +194,8 @@ export default function OnboardingPage() {
 
   if (state.kind === 'success') {
     return (
-      <main className="flex flex-1 flex-col items-center justify-center p-6">
-        <section className="w-full max-w-md rounded-lg border border-emerald-700/60 bg-emerald-900/20 p-6 text-center">
+      <main className="flex flex-1 flex-col items-center justify-center p-3 md:p-6">
+        <section className="w-full max-w-md rounded-lg border border-emerald-700/60 bg-emerald-900/20 p-4 text-center md:p-6">
           <h1 className="text-xl font-bold text-emerald-100">
             Brought {state.games} game{state.games === 1 ? '' : 's'} and{' '}
             {state.events} weakness event{state.events === 1 ? '' : 's'} across.
@@ -209,8 +209,8 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center p-6">
-      <section className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900/40 p-6">
+    <main className="flex flex-1 flex-col items-center justify-center p-3 md:p-6">
+      <section className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900/40 p-4 md:p-6">
         <h1 className="text-xl font-bold text-slate-100">Welcome to Chesster</h1>
         <p className="mt-2 text-sm leading-relaxed text-slate-400">
           What should we call you?
