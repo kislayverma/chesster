@@ -20,12 +20,13 @@
  *     is no authenticated session, so anonymous play never reaches
  *     for the network.
  *
- * Sign-in flow gotcha: the handler intentionally does NOTHING when
- * `isAlreadyMigrated(userId)` is false. If we blindly replaced the
- * local profile + games on first sign-in, we'd nuke the anonymous
- * user's unmigrated data before the Onboarding screen even mounts.
- * Onboarding is responsible for calling `hydrateFromRemote` itself
- * once the migration decision has been recorded.
+ * Sign-in flow: the handler checks `isAlreadyMigrated(userId)`. If
+ * true, it hydrates immediately. If false, it probes for a remote
+ * profile — a returning user whose local claim was cleared (e.g.
+ * via "Clear all local data") will have `totalGames > 0` on the
+ * server, so we re-mark the claim and hydrate without routing
+ * through onboarding. Only genuinely new sign-ins (no remote data)
+ * are left for the OnboardingPage to handle.
  *
  * Sign-out policy: local IndexedDB is preserved. The user can keep
  * playing anonymously with their library intact, and signing back in
@@ -39,7 +40,7 @@ import {
   setOnSignOutHandler,
   useAuthStore,
 } from '../auth/authStore';
-import { isAlreadyMigrated } from './migrateAnonymous';
+import { declineMigration, isAlreadyMigrated } from './migrateAnonymous';
 import { loadProfileRemote, saveProfileRemote } from './remoteProfileStore';
 import { loadAllGamesRemote, saveGameRemote } from './remoteGameStore';
 import { loadAllCardsRemote, saveCardRemote } from './remotePracticeStore';
@@ -61,10 +62,26 @@ export function initSyncOrchestrator(): void {
 
   setOnSignInHandler(async (session) => {
     const userId = session.user.id;
-    // Wait for the migration flow to finalize before touching local
-    // data on this device. See the module header for rationale.
-    if (!(await isAlreadyMigrated(userId))) return;
-    await hydrateFromRemote(userId);
+
+    if (await isAlreadyMigrated(userId)) {
+      // Normal returning sign-in — hydrate from server.
+      await hydrateFromRemote(userId);
+      return;
+    }
+
+    // The claim is missing. This is either a genuinely new sign-in or a
+    // returning user whose claim was cleared (e.g. "Clear all local data").
+    // Check the server: if a profile with games exists, this is a returning
+    // user — re-mark the claim and hydrate immediately instead of routing
+    // through onboarding.
+    const remoteProfile = await loadProfileRemote(userId);
+    if (remoteProfile && remoteProfile.totalGames > 0) {
+      await declineMigration(userId);
+      await hydrateFromRemote(userId);
+      return;
+    }
+
+    // Genuinely first sign-in — let OnboardingPage handle migration.
   });
 
   setOnSignOutHandler(() => {
