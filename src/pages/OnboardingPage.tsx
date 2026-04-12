@@ -33,6 +33,7 @@ import {
   type MigrationSummary,
 } from '../sync/migrateAnonymous';
 import { hydrateFromRemote } from '../sync/syncOrchestrator';
+import { loadProfileRemote } from '../sync/remoteProfileStore';
 
 type UiState =
   | { kind: 'loading' }
@@ -65,23 +66,40 @@ export default function OnboardingPage() {
     }
   }, [status, user, navigate]);
 
-  // Summarize local data once the session is stable.
+  // Summarize local data once the session is stable. If the device is
+  // empty but the user already has a remote profile (returning user on
+  // a new device), skip onboarding entirely — just hydrate and redirect.
   useEffect(() => {
     if (status !== 'authenticated' || !user) return;
     let cancelled = false;
-    void summarizeLocalForMigration().then((summary) => {
+    void (async () => {
+      const summary = await summarizeLocalForMigration();
       if (cancelled) return;
-      if (
+
+      const deviceIsEmpty =
         summary.localGameCount === 0 &&
         summary.localEventCount === 0 &&
-        !summary.hasLocalProfile
-      ) {
-        // Nothing to migrate — show name prompt before continuing.
+        !summary.hasLocalProfile;
+
+      if (deviceIsEmpty) {
+        // Check if this is a returning user with data on the server.
+        const remoteProfile = await loadProfileRemote(user.id);
+        if (cancelled) return;
+
+        if (remoteProfile && remoteProfile.totalGames > 0) {
+          // Returning user on a new device — skip name prompt, hydrate, go.
+          await declineMigration(user.id);
+          await hydrateFromRemote(user.id);
+          if (!cancelled) navigate(nextParam, { replace: true });
+          return;
+        }
+
+        // Genuinely new user — show name prompt.
         setState({ kind: 'empty' });
       } else {
         setState({ kind: 'prompt', summary });
       }
-    });
+    })();
     return () => {
       cancelled = true;
     };
@@ -95,7 +113,6 @@ export default function OnboardingPage() {
 
   const onMigrate = async () => {
     if (!user) return;
-    persistName();
     setState({ kind: 'working' });
     const result = await runMigration();
     if (!result.ok) {
@@ -106,6 +123,7 @@ export default function OnboardingPage() {
       return;
     }
     await hydrateFromRemote(user.id);
+    persistName();
     setState({
       kind: 'success',
       games: result.counts.games,
@@ -116,19 +134,21 @@ export default function OnboardingPage() {
 
   const onSkip = async () => {
     if (!user) return;
-    persistName();
     setState({ kind: 'working' });
     await declineMigration(user.id);
     await hydrateFromRemote(user.id);
+    persistName();
     navigate(nextParam, { replace: true });
   };
 
   const onContinueEmpty = async () => {
     if (!user) return;
-    persistName();
     setState({ kind: 'loading' });
     await declineMigration(user.id);
     await hydrateFromRemote(user.id);
+    // Persist the name AFTER hydration so we don't overwrite the remote
+    // profile with a near-empty local one before it's been pulled down.
+    persistName();
     navigate(nextParam, { replace: true });
   };
 
