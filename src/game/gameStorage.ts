@@ -217,3 +217,29 @@ export async function deleteGame(id: string): Promise<void> {
   const idx = await readIndex();
   await writeIndex(idx.filter((e) => e.id !== id));
 }
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Delete unfinished games that haven't been updated in 7+ days.
+ * Returns the number of games removed.
+ */
+export async function purgeStaleUnfinished(): Promise<number> {
+  const idx = await readIndex();
+  const cutoff = Date.now() - SEVEN_DAYS_MS;
+  const stale = idx.filter(
+    (e) => e.finishedAt === null && e.updatedAt < cutoff,
+  );
+  for (const entry of stale) {
+    try {
+      await localforage.removeItem(gameKey(entry.id));
+    } catch (err) {
+      console.warn('[gameStorage] purgeStale remove failed', entry.id, err);
+    }
+  }
+  if (stale.length > 0) {
+    const staleIds = new Set(stale.map((e) => e.id));
+    await writeIndex(idx.filter((e) => !staleIds.has(e.id)));
+  }
+  return stale.length;
+}

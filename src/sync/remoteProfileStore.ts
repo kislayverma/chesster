@@ -207,6 +207,18 @@ export async function loadProfileRemote(
     acplHistory: Array.isArray(row?.acpl_history)
       ? (row!.acpl_history as PlayerProfile['acplHistory'])
       : [],
+    journeyState: (row as unknown as Record<string, unknown>)?.journey_state as PlayerProfile['journeyState'] ?? {
+      calibrationGamesPlayed: 0,
+      calibrated: false,
+      currentLevel: 'newcomer',
+      levelProgress: 0,
+      rollingRating: 0,
+      gamesAtCurrentLevel: 0,
+      reviewCreditsToday: 0,
+      reviewCreditDate: new Date().toISOString().slice(0, 10),
+      promotionHistory: [],
+      lastPromotionDismissed: true,
+    },
     createdAt: row?.created_at ? Date.parse(row.created_at) : Date.now(),
     updatedAt: row?.updated_at ? Date.parse(row.updated_at) : Date.now(),
   };

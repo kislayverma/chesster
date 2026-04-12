@@ -18,11 +18,13 @@
 
 import type {
   PlayerProfile,
+  JourneyState,
   WeaknessEvent,
   MotifCounter,
   OpeningStat,
 } from './types';
 import type { GamePhase } from '../tagging/phaseDetector';
+import { processGameFinished } from '../lib/journey';
 
 /** 14 days in milliseconds — decay half-life for motifCounts.decayedCount. */
 export const HALFLIFE_MS = 14 * 24 * 60 * 60 * 1000;
@@ -34,6 +36,21 @@ export const HALFLIFE_MS = 14 * 24 * 60 * 60 * 1000;
  */
 const PHASE_WINDOW = 50;
 
+export function createEmptyJourneyState(): JourneyState {
+  return {
+    calibrationGamesPlayed: 0,
+    calibrated: false,
+    currentLevel: 'newcomer',
+    levelProgress: 0,
+    rollingRating: 0,
+    gamesAtCurrentLevel: 0,
+    reviewCreditsToday: 0,
+    reviewCreditDate: new Date().toISOString().slice(0, 10),
+    promotionHistory: [],
+    lastPromotionDismissed: true,
+  };
+}
+
 export function createEmptyProfile(now: number = Date.now()): PlayerProfile {
   return {
     totalGames: 0,
@@ -43,6 +60,7 @@ export function createEmptyProfile(now: number = Date.now()): PlayerProfile {
     phaseCpLoss: { opening: 0, middlegame: 0, endgame: 0 },
     openingWeaknesses: {},
     acplHistory: [],
+    journeyState: createEmptyJourneyState(),
     createdAt: now,
     updatedAt: now,
   };
@@ -147,18 +165,26 @@ export function appendWeaknessEvent(
 
 /**
  * Record a finished game: bumps totalGames, appends an acplHistory
- * entry. The caller passes the game's average centipawn loss across
- * the player's own moves (0 if none were classified).
+ * entry, and advances the journey state machine (calibration →
+ * progress → promotion).  See DESIGN.md §17.
  */
 export function recordGameFinished(
   profile: PlayerProfile,
   acpl: number,
   now: number = Date.now()
 ): PlayerProfile {
+  const newAcplHistory = [...profile.acplHistory, { timestamp: now, acpl }];
+  const journeyState = processGameFinished(
+    profile.journeyState ?? createEmptyJourneyState(),
+    newAcplHistory,
+    acpl,
+    now,
+  );
   return {
     ...profile,
     totalGames: profile.totalGames + 1,
-    acplHistory: [...profile.acplHistory, { timestamp: now, acpl }],
+    acplHistory: newAcplHistory,
+    journeyState,
     updatedAt: now,
   };
 }

@@ -8,8 +8,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { NavLink } from 'react-router-dom';
-import { listGames, deleteGame } from '../game/gameStorage';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { listGames, deleteGame, loadGame, purgeStaleUnfinished } from '../game/gameStorage';
+import { deserializeTree } from '../game/gameStorage';
+import { useGameStore } from '../game/gameStore';
 import type { PersistedGameIndexEntry } from '../profile/types';
 
 /** Date-only string for grouping (e.g. "Apr 12, 2026"). */
@@ -77,6 +79,8 @@ function groupByDate(
 export default function LibraryPage() {
   const [games, setGames] = useState<PersistedGameIndexEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const resumeGame = useGameStore((s) => s.resumeGame);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -86,7 +90,8 @@ export default function LibraryPage() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    // Purge stale unfinished games (>7 days old), then load the list.
+    void purgeStaleUnfinished().then(() => refresh());
   }, [refresh]);
 
   const handleDelete = useCallback(
@@ -98,6 +103,19 @@ export default function LibraryPage() {
       await refresh();
     },
     [refresh],
+  );
+
+  const handleResume = useCallback(
+    async (id: string, humanColor: 'w' | 'b', engineEnabled: boolean, e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const game = await loadGame(id);
+      if (!game) return;
+      const tree = deserializeTree(game.tree);
+      resumeGame(tree, humanColor, engineEnabled);
+      navigate('/play');
+    },
+    [resumeGame, navigate],
   );
 
   const dateGroups = useMemo(() => groupByDate(games), [games]);
@@ -161,9 +179,21 @@ export default function LibraryPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500 opacity-0 transition-opacity group-hover:opacity-100">
-                          Review &rarr;
-                        </span>
+                        {g.finishedAt === null ? (
+                          <button
+                            type="button"
+                            onClick={(e) =>
+                              void handleResume(g.id, g.humanColor, g.engineEnabled, e)
+                            }
+                            className="rounded bg-emerald-700/60 px-2 py-0.5 text-xs font-medium text-emerald-200 opacity-0 transition-opacity hover:bg-emerald-600/60 group-hover:opacity-100"
+                          >
+                            Resume
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-500 opacity-0 transition-opacity group-hover:opacity-100">
+                            Review &rarr;
+                          </span>
+                        )}
                         <button
                           type="button"
                           onClick={(e) => void handleDelete(g.id, e)}

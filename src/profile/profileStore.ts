@@ -21,9 +21,11 @@ import {
   recordGameFinished,
 } from './profileAggregates';
 import { buildProfileSummary } from './weaknessSelector';
+import { createEmptyJourneyState } from './profileAggregates';
 import type { PlayerProfile, WeaknessEvent } from './types';
 import type { ProfileSummary } from '../coach/types';
 import { pushProfileRemote } from '../sync/syncOrchestrator';
+import { processMistakeReview } from '../lib/journey';
 
 const STORAGE_KEY = 'chesster:profile:v1';
 const SAVE_DEBOUNCE_MS = 500;
@@ -54,6 +56,12 @@ interface ProfileStore {
 
   /** Record a finished game: totalGames++ and push an ACPL sample. */
   finishGame: (acpl: number) => void;
+
+  /** Dismiss the latest promotion banner. */
+  dismissPromotion: () => void;
+
+  /** Credit a mistake review for journey progress. */
+  recordMistakeReview: () => void;
 
   /** Trimmed projection sent to the coach for personalization. */
   getProfileSummary: () => ProfileSummary;
@@ -87,6 +95,10 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
     try {
       const stored = await localforage.getItem<PlayerProfile>(STORAGE_KEY);
       if (stored && Array.isArray(stored.weaknessEvents)) {
+        // Backfill journeyState for profiles created before the journey system.
+        if (!stored.journeyState) {
+          stored.journeyState = createEmptyJourneyState();
+        }
         // Recompute decayed counts so they reflect "now", not last save.
         const refreshed = recomputeAggregates(stored);
         set({ profile: refreshed, hydrated: true });
@@ -131,6 +143,30 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
 
   finishGame: (acpl) => {
     const next = recordGameFinished(get().profile, acpl);
+    set({ profile: next });
+    scheduleSave(next);
+  },
+
+  dismissPromotion: () => {
+    const profile = get().profile;
+    const journeyState = profile.journeyState ?? createEmptyJourneyState();
+    const next: PlayerProfile = {
+      ...profile,
+      journeyState: { ...journeyState, lastPromotionDismissed: true },
+    };
+    set({ profile: next });
+    scheduleSave(next);
+  },
+
+  recordMistakeReview: () => {
+    const profile = get().profile;
+    const journeyState = profile.journeyState ?? createEmptyJourneyState();
+    const updated = processMistakeReview(journeyState);
+    const next: PlayerProfile = {
+      ...profile,
+      journeyState: updated,
+      updatedAt: Date.now(),
+    };
     set({ profile: next });
     scheduleSave(next);
   },

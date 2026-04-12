@@ -6,7 +6,7 @@
  * Content is a direct carryover from Phase 4 `App.tsx`.
  */
 
-import { useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 import Board from '../components/Board';
 import CoachPanel from '../components/CoachPanel';
 import EvalBar from '../components/EvalBar';
@@ -14,7 +14,6 @@ import MoveList from '../components/MoveList';
 import PracticePrompt from '../components/PracticePrompt';
 import StackPanel from '../components/StackPanel';
 import { useGameStore } from '../game/gameStore';
-import { exportPgn } from '../game/pgn';
 
 export default function PlayPage() {
   const turn = useGameStore((s) => s.turn);
@@ -22,6 +21,7 @@ export default function PlayPage() {
   const isGameOver = useGameStore((s) => s.isGameOver);
   const result = useGameStore((s) => s.result);
   const reset = useGameStore((s) => s.reset);
+  const resign = useGameStore((s) => s.resign);
   const undo = useGameStore((s) => s.undo);
   const goBack = useGameStore((s) => s.goBack);
   const goForward = useGameStore((s) => s.goForward);
@@ -31,7 +31,7 @@ export default function PlayPage() {
   const tree = useGameStore((s) => s.tree);
   const humanColor = useGameStore((s) => s.humanColor);
   const skillLevel = useGameStore((s) => s.skillLevel);
-  const thinking = useGameStore((s) => s.thinking);
+
   const setHumanColor = useGameStore((s) => s.setHumanColor);
   const setSkillLevel = useGameStore((s) => s.setSkillLevel);
 
@@ -39,9 +39,7 @@ export default function PlayPage() {
     ? result
       ? `Game over · ${result}`
       : 'Game over'
-    : `${turn === 'w' ? 'White' : 'Black'} to move${inCheck ? ' · check' : ''}${
-        thinking ? ' · Stockfish thinking…' : ''
-      }`;
+    : `${turn === 'w' ? 'White' : 'Black'} to move${inCheck ? ' · check' : ''}`;
 
   // Check if forward navigation is possible (current node has children).
   const canGoForward = tree.nodes.get(currentNodeId)?.childrenIds.length ?? 0 > 0;
@@ -70,21 +68,6 @@ export default function PlayPage() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [goBack, goForward]);
-
-  const copyPgn = useCallback(async () => {
-    const pgn = exportPgn(tree, { humanColor });
-    try {
-      await navigator.clipboard.writeText(pgn);
-    } catch {
-      // Fallback for browsers that block clipboard API.
-      const ta = document.createElement('textarea');
-      ta.value = pgn;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-    }
-  }, [tree, humanColor]);
 
   return (
     <main className="grid flex-1 grid-cols-1 gap-6 p-6 lg:grid-cols-[auto_auto_320px]">
@@ -130,19 +113,23 @@ export default function PlayPage() {
           >
             Undo
           </button>
+          {!isGameOver && historyLength > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm('Resign this game?')) resign();
+              }}
+              className="rounded bg-rose-900/60 px-3 py-1 text-rose-200 hover:bg-rose-800/60"
+            >
+              Resign
+            </button>
+          )}
           <button
             type="button"
             onClick={reset}
             className="rounded bg-slate-800 px-3 py-1 text-slate-200 hover:bg-slate-700"
           >
             New game
-          </button>
-          <button
-            type="button"
-            onClick={copyPgn}
-            className="rounded bg-slate-800 px-3 py-1 text-slate-200 hover:bg-slate-700"
-          >
-            Copy PGN
           </button>
         </div>
       </section>

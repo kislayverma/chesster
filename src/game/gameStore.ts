@@ -259,6 +259,16 @@ interface GameStore
   /** Navigate one ply forwards (towards the tip of the current line). */
   goForward: () => void;
 
+  /** Resign the current game. The human player loses. */
+  resign: () => void;
+
+  /**
+   * Load a previously persisted game tree into the store so the
+   * player can continue playing it. The board lands on the last
+   * mainline position.
+   */
+  resumeGame: (tree: GameTree, humanColor: 'w' | 'b', engineEnabled: boolean) => void;
+
   setEngineEnabled: (on: boolean) => void;
   setHumanColor: (color: 'w' | 'b') => void;
   setSkillLevel: (level: number) => void;
@@ -1146,6 +1156,76 @@ export const useGameStore = create<GameStore>((set, get) => {
       });
       const snap = snapshotFromFen(getNode(tree, targetId).fen);
       kickObservation(snap.fen, snap.turn, seq);
+    },
+
+    resign: () => {
+      const state = get();
+      if (state.isGameOver) return;
+      if (state.history.length === 0) return; // nothing to resign
+
+      const { tree, humanColor, engineEnabled } = state;
+
+      // Mark as finished with the human losing.
+      const result: GameTree['result'] =
+        humanColor === 'w' ? '0-1' : '1-0';
+      tree.result = result;
+      finishedGameIds.add(tree.id);
+
+      const acpl = computeMainlineAcpl(tree, humanColor);
+      useProfileStore.getState().finishGame(acpl);
+
+      analysisSeq += 1;
+      set({
+        isGameOver: true,
+        result,
+      });
+
+      persistTree(tree, humanColor, engineEnabled, Date.now());
+    },
+
+    resumeGame: (loadedTree, humanColor, engineEnabled) => {
+      // Persist the outgoing game first (same as reset).
+      const prev = get();
+      if (prev.history.length > 0) {
+        persistTree(prev.tree, prev.humanColor, prev.engineEnabled);
+      }
+
+      analysisSeq += 1;
+      const seq = analysisSeq;
+      engineNewGame();
+
+      // Navigate to the mainline head so the player picks up where
+      // they left off.
+      const headId = loadedTree.mainGameHeadId;
+      loadedTree.currentNodeId = headId;
+      const frame = findFrameForNode(loadedTree, headId);
+      loadedTree.currentFrameId = frame.id;
+
+      const headNode = getNode(loadedTree, headId);
+      const snap = snapshotFromFen(headNode.fen);
+
+      set({
+        tree: { ...loadedTree },
+        currentNodeId: headId,
+        mainGameHeadId: loadedTree.mainGameHeadId,
+        stackFrames: loadedTree.stackFrames,
+        currentFrameId: frame.id,
+        history: pathFromRoot(loadedTree, headId).slice(1),
+        ...snap,
+        humanColor,
+        engineEnabled,
+        thinking: false,
+        lastBestMove: null,
+        evalCp: 0,
+        mate: null,
+        evalDepth: 0,
+        ...EMPTY_COACH_STATE,
+      });
+
+      // If it's the engine's turn, kick analysis so it plays.
+      if (engineEnabled && !snap.isGameOver && snap.turn !== humanColor) {
+        kickAnalysis(snap.fen, snap.turn, seq);
+      }
     },
 
     setEngineEnabled: (on) => {

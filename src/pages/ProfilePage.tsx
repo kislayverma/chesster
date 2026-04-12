@@ -9,9 +9,12 @@
  */
 
 import { NavLink } from 'react-router-dom';
+import { useAuthStore } from '../auth/authStore';
 import { useProfileStore } from '../profile/profileStore';
 import { acplToRating, ratingStanding } from '../lib/rating';
 import type { MotifCounter } from '../profile/types';
+import JourneyCard from '../components/JourneyCard';
+import CalibrationCard from '../components/CalibrationCard';
 
 /** Human-readable labels for motif IDs. */
 const MOTIF_LABELS: Record<string, string> = {
@@ -35,6 +38,9 @@ export default function ProfilePage() {
   const profile = useProfileStore((s) => s.profile);
   const hydrated = useProfileStore((s) => s.hydrated);
   const clearProfile = useProfileStore((s) => s.clearProfile);
+  const authStatus = useAuthStore((s) => s.status);
+  const isAuthenticated = authStatus === 'authenticated';
+  const journey = profile.journeyState;
 
   if (!hydrated) {
     return (
@@ -116,6 +122,10 @@ export default function ProfilePage() {
           Clear profile
         </button>
       </header>
+
+      {/* Journey section — only for authenticated users */}
+      {isAuthenticated && journey?.calibrated && <JourneyCard />}
+      {isAuthenticated && !journey?.calibrated && <CalibrationCard />}
 
       {/* Summary stats */}
       <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">

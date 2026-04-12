@@ -830,6 +830,149 @@ The only capability BYOK unlocks is **quality of coach prose**. Everything struc
 
 ---
 
+## 17. Player Journey & Progression
+
+### 17.1 Overview & Auth Gate
+
+The journey system provides a structured progression path that makes improvement visible and encourages consistent play. **It is exclusively available to authenticated users** (`status === 'authenticated'`). Anonymous and unconfigured users see no levels, no progress bars, no calibration UI — they get the generic HomePage hero and feature cards. This is a deliberate retention incentive: the journey is a reason to sign in.
+
+**Reasoning:** Tying progression to auth serves two purposes. First, journey state must persist across devices, which requires a user identity. Second, it creates a natural upgrade path — anonymous users play freely, and when they sign in they unlock a structured learning experience built on top of the same games they've already played.
+
+### 17.2 Calibration Phase
+
+Before assigning a level, the system needs a baseline. New authenticated users play **2 calibration games**. During this phase:
+
+- The Home page shows a journey pitch (the level ladder, what calibration is, a CTA to play).
+- A CalibrationCard shows "Game N of 2 — calibrating your level..." on the Play and Home pages.
+- No rating or level is displayed — reducing pressure on the first games.
+- Stockfish skill starts at 10 (mid-range). After the first calibration game, auto-adjust by +3 or -3 based on whether the player's ACPL was below or above 50 (the ~1400 Elo midpoint). This ensures the second game is at a more appropriate challenge level.
+
+After 2 games, the system computes a **weighted average ACPL** (game 1 weight 1.0, game 2 weight 1.5 — the more recent game matters slightly more), converts it to Elo via `acplToRating()`, and assigns the initial level.
+
+A one-time **reveal card** appears showing the assigned level, its description, focus areas, and what the next level looks like.
+
+**Why 2 games, not 5:** Two games is the minimum for a meaningful baseline while keeping the barrier to entry very low. A 5-game calibration means most casual users never finish it — they churn before seeing any progression UI. Two games can be completed in a single session (15-20 minutes), which means the user sees their level the same day they sign up. The weighting toward the second game compensates for first-game jitters.
+
+### 17.3 Level Definitions
+
+Six levels, each with an Elo anchor, suggested Stockfish skill range, and focus areas drawn from the existing motif vocabulary.
+
+| Level | Elo Range | Stockfish Skill | Focus Motifs | Description |
+|---|---|---|---|---|
+| **Newcomer** | < 900 | 1-4 | `hangingPiece`, `undefendedPiece` | Learning the basics — avoid giving away pieces |
+| **Learner** | 900 - 1199 | 5-8 | `missedFork`, `missedPin` | Building fundamentals — spot simple tactics |
+| **Club Player** | 1200 - 1499 | 9-11 | `kingSafetyDrop`, `pawnStructure` | Solid and improving — develop strategic awareness |
+| **Competitor** | 1500 - 1799 | 12-15 | `missedSkewer`, `overloadedDefender` | Strategically aware — deeper tactics and planning |
+| **Advanced Thinker** | 1800 - 2199 | 16-18 | `badEndgameTrade`, `weakBackRank` | Deep understanding — precision and endgame mastery |
+| **Expert** | 2200+ | 19-20 | All motifs | Elite precision — complex strategy and calculation |
+
+**Why 6 levels instead of 11:** Fewer levels mean each promotion is a meaningful event. With 11 levels, mid-tier players can plateau for weeks between promotions, which kills motivation. Six levels keep the next milestone within reach — the widest Elo band is 400 points (Advanced Thinker), which a consistently improving player can traverse in 20-30 games.
+
+**Why these Elo anchors:** They map directly to the existing `acplToRating()` conversion table. The boundaries (900, 1200, 1500, 1800, 2200) correspond to natural breakpoints in the ACPL→Elo curve where play quality shifts meaningfully.
+
+### 17.4 Multi-Source Progress
+
+Each level has a **progress bar** from 0% to 100%. Three activities contribute progress:
+
+1. **Playing games** (+5-15% per game) — Based on how the game's ACPL compares to the current level's expected range. A game played above the player's level earns more. A game played well below earns less (but never zero — playing always counts).
+
+2. **Reviewing mistakes** (+3-5% per review) — Triggered when a logged-in user opens a game from the Mistakes page (detected via the `?move=` query param). The act of revisiting a mistake and stepping through the position earns credit. Capped at 3 reviews per day to prevent grinding.
+
+3. **Reducing weaknesses** (+10% bonus) — Awarded automatically when a motif's `decayedCount` drops below a threshold (i.e., the player stopped making that type of mistake recently). This hooks into the existing exponential decay system — no new tracking needed.
+
+**Why multi-source:** Single-source progress (play games only) means the only way to engage is a 15-minute game. Multi-source progress lets users advance in 2-minute sessions (review a mistake, check their profile). This dramatically increases session frequency. Duolingo, chess.com, and every high-retention learning app uses this pattern.
+
+**Why no puzzles/drills as a source:** The existing SRS practice system could be wired in later, but the three sources above work entirely with features that already exist in the codebase. No new UI screens needed for the MVP.
+
+### 17.5 Promotion Criteria
+
+To level up, a player must satisfy **both**:
+
+1. **Progress bar at 100%** — earned through the three sources above.
+2. **Rolling Elo ≥ next level's floor** — the weighted average of the last 10 games (or all games if fewer than 10) must meet the threshold. This prevents gaming the progress bar with volume alone.
+
+Additionally: **minimum 5 games at current level** — prevents instant skip-through from lucky calibration.
+
+On promotion:
+- A `PromotionBanner` appears on the Home page showing the new level, what improved, and new focus areas.
+- A suggestion to adjust Stockfish skill is shown (non-blocking).
+- The promotion is recorded in `promotionHistory` for the profile timeline.
+
+**Why a dual gate (progress + Elo):** Progress bar alone rewards quantity. Elo gate alone ignores effort. The combination means you must both put in the work (reviews, consistent play) AND demonstrate the skill. This makes promotions feel earned.
+
+### 17.6 No Demotion
+
+**Level titles never drop.** If performance declines, the progress bar drains toward 0%, but the player keeps their level. This is a deliberate design choice.
+
+**Reasoning:** Demotion is the #1 reason users quit progression systems. A player who reaches Club Player and then has a bad week should not wake up to "You're a Learner again." The progress bar draining is sufficient negative feedback — it communicates "you need to play better to advance" without the psychological damage of losing a title. The player's high-water mark is always preserved.
+
+If the rolling Elo drops significantly below the current level's floor, the progress bar sits at 0% and the journey card shows "Your recent games suggest you're playing below your level — keep practicing to get back on track." This is gentler than demotion and still communicates the situation honestly.
+
+### 17.7 Home Page States (Authenticated Users)
+
+The Home page renders three distinct views based on auth + journey state:
+
+1. **Not logged in** — Generic hero ("Welcome to Chesster"), feature pitch, "Play now" CTA, feature cards. No journey UI. This is the current behavior, unchanged.
+
+2. **Logged in, not yet calibrated** — Journey pitch section:
+   - Headline: "Your Chess Journey Starts Here"
+   - Visual level ladder showing all 6 levels with brief descriptions
+   - Explanation of calibration: "Play 2 games and we'll find your starting level"
+   - Prominent CTA: "Play your first game"
+   - If 1 of 2 calibration games is done: "1 more game to go — almost there"
+
+3. **Logged in, calibrated** — Journey dashboard:
+   - JourneyCard at top (level, rating, progress bar, next milestone, focus areas)
+   - PromotionBanner if just promoted (dismissable)
+   - Quick stats (games, moves, rating)
+   - Feature cards
+
+### 17.8 Profile Page Integration
+
+- **Authenticated + calibrated:** JourneyCard rendered at the top of the profile, above the existing stats/trends.
+- **Authenticated + not calibrated:** CalibrationCard shown instead ("Play N more games to unlock your level").
+- **Not authenticated:** No journey UI — existing profile content only.
+
+### 17.9 Data Model
+
+Added to `PlayerProfile`:
+
+```ts
+interface JourneyState {
+  calibrationGamesPlayed: number;    // 0, 1, or 2
+  calibrated: boolean;               // true after 2 games
+  currentLevel: string;              // level key (e.g. 'clubPlayer')
+  levelProgress: number;             // 0-100
+  rollingRating: number;             // weighted avg of last 10 games
+  gamesAtCurrentLevel: number;       // resets on promotion
+  reviewCreditsToday: number;        // caps at 3 per day
+  reviewCreditDate: string;          // ISO date for daily reset
+  promotionHistory: Array<{ level: string; timestamp: number }>;
+  lastPromotionDismissed: boolean;   // user dismissed the banner
+}
+```
+
+Journey state is recomputed from the existing `acplHistory` and `weaknessEvents` arrays whenever a game finishes or a mistake is reviewed. The append-only event log remains the source of truth; journey state is a derived projection.
+
+### 17.10 Implementation Files
+
+**New files:**
+- `src/lib/journey.ts` — Pure functions: `computeRollingRating`, `assignInitialLevel`, `computeLevelProgress`, `checkPromotion`, `drainProgress`, `suggestedSkillRange`, `levelFocusAreas`, `levelMeta`, level constants
+- `src/components/JourneyCard.tsx` — Progress card for Home/Profile
+- `src/components/PromotionBanner.tsx` — Celebration banner
+- `src/components/CalibrationCard.tsx` — "Calibrating..." indicator
+
+**Modified files:**
+- `src/profile/types.ts` — Add `JourneyState` to `PlayerProfile`
+- `src/profile/profileAggregates.ts` — Call journey logic in `recordGameFinished()`
+- `src/profile/profileStore.ts` — Expose journey state, add `dismissPromotion()` and `recordMistakeReview()` actions
+- `src/lib/rating.ts` — Add `ALL_LEVELS`, `ratingForLevel()`, `nextLevel()`
+- `src/pages/HomePage.tsx` — Three-state rendering based on auth + journey
+- `src/pages/ProfilePage.tsx` — JourneyCard / CalibrationCard at top
+- `src/pages/GameReviewPage.tsx` — Call `recordMistakeReview()` on load when `?move=` param is present
+
+---
+
 ## 16. Setup
 
 See `README.md` for run instructions. Short version:

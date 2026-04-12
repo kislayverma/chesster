@@ -66,6 +66,34 @@ export interface OpeningStat {
 }
 
 /**
+ * Progression journey state — only meaningful for authenticated users.
+ * Derived from `acplHistory` and `weaknessEvents`; recomputed on game
+ * finish and mistake review.  See DESIGN.md §17 for full spec.
+ */
+export interface JourneyState {
+  /** Number of calibration games completed (0, 1, or 2). */
+  calibrationGamesPlayed: number;
+  /** True once the player has finished 2 calibration games. */
+  calibrated: boolean;
+  /** Current level key (e.g. 'newcomer', 'clubPlayer'). */
+  currentLevel: string;
+  /** Progress toward the next level (0-100). */
+  levelProgress: number;
+  /** Weighted average Elo of last 10 games. */
+  rollingRating: number;
+  /** Games completed since the last promotion (resets on level-up). */
+  gamesAtCurrentLevel: number;
+  /** Mistake reviews credited today (capped at 3/day). */
+  reviewCreditsToday: number;
+  /** ISO date string for daily review-credit reset. */
+  reviewCreditDate: string;
+  /** Timeline of promotions. */
+  promotionHistory: Array<{ level: string; timestamp: number }>;
+  /** Whether the user has dismissed the latest promotion banner. */
+  lastPromotionDismissed: boolean;
+}
+
+/**
  * Persistent, per-user (currently anonymous / device-local) profile.
  * The event log is the source of truth — aggregates are derived and
  * can be recomputed from `weaknessEvents` at any time (see
@@ -80,6 +108,8 @@ export interface PlayerProfile {
   phaseCpLoss: { opening: number; middlegame: number; endgame: number };
   openingWeaknesses: Record<string, OpeningStat>;
   acplHistory: AcplHistoryEntry[];
+  /** Journey progression state (authenticated users only). */
+  journeyState: JourneyState;
   createdAt: number;
   updatedAt: number;
 }

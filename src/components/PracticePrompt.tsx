@@ -17,7 +17,7 @@ export default function PracticePrompt() {
   if (!hydrated || dueCount === 0 || dismissed) return null;
 
   return (
-    <div className="flex items-center justify-between rounded border border-amber-800/40 bg-amber-900/20 px-4 py-2 text-sm">
+    <div className="flex items-center justify-between gap-4 rounded border border-amber-800/40 bg-amber-900/20 px-4 py-2 text-sm">
       <span className="text-amber-200">
         You have <strong>{dueCount}</strong> drill{dueCount !== 1 ? 's' : ''}{' '}
         due. Warm up before playing?

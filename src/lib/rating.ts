@@ -69,3 +69,46 @@ export function formatRating(acpl: number): string {
 export function formatStanding(acpl: number): string {
   return ratingStanding(acplToRating(acpl));
 }
+
+/* ─── Journey level definitions (DESIGN.md §17.3) ─────────────────── */
+
+export interface LevelDef {
+  key: string;
+  name: string;
+  /** Minimum Elo to be at this level. */
+  floor: number;
+  /** Elo ceiling (exclusive) — `Infinity` for the top level. */
+  ceiling: number;
+  /** Suggested Stockfish skill-level range. */
+  skillRange: [number, number];
+  description: string;
+}
+
+export const ALL_LEVELS: readonly LevelDef[] = [
+  { key: 'newcomer',        name: 'Newcomer',         floor: 0,    ceiling: 900,      skillRange: [1, 4],   description: 'Learning the basics — avoid giving away pieces' },
+  { key: 'learner',         name: 'Learner',          floor: 900,  ceiling: 1200,     skillRange: [5, 8],   description: 'Building fundamentals — spot simple tactics' },
+  { key: 'clubPlayer',      name: 'Club Player',      floor: 1200, ceiling: 1500,     skillRange: [9, 11],  description: 'Solid and improving — develop strategic awareness' },
+  { key: 'competitor',      name: 'Competitor',       floor: 1500, ceiling: 1800,     skillRange: [12, 15], description: 'Strategically aware — deeper tactics and planning' },
+  { key: 'advancedThinker', name: 'Advanced Thinker', floor: 1800, ceiling: 2200,     skillRange: [16, 18], description: 'Deep understanding — precision and endgame mastery' },
+  { key: 'expert',          name: 'Expert',           floor: 2200, ceiling: Infinity,  skillRange: [19, 20], description: 'Elite precision — complex strategy and calculation' },
+] as const;
+
+/** Get the full level definition by key. */
+export function getLevelDef(key: string): LevelDef {
+  return ALL_LEVELS.find((l) => l.key === key) ?? ALL_LEVELS[0];
+}
+
+/** Get the next level definition, or `null` if already at the top. */
+export function nextLevel(key: string): LevelDef | null {
+  const idx = ALL_LEVELS.findIndex((l) => l.key === key);
+  if (idx < 0 || idx >= ALL_LEVELS.length - 1) return null;
+  return ALL_LEVELS[idx + 1];
+}
+
+/** Determine which level a given Elo rating falls into. */
+export function levelForRating(elo: number): LevelDef {
+  for (let i = ALL_LEVELS.length - 1; i >= 0; i--) {
+    if (elo >= ALL_LEVELS[i].floor) return ALL_LEVELS[i];
+  }
+  return ALL_LEVELS[0];
+}

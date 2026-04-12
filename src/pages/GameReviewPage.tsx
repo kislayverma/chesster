@@ -17,6 +17,7 @@ import { walkMainline } from '../game/gameTree';
 import type { GameTree, MoveNode } from '../game/gameTree';
 import type { PersistedGame } from '../profile/types';
 import { useProfileStore } from '../profile/profileStore';
+import { useAuthStore } from '../auth/authStore';
 import { QUALITY_COLORS, QUALITY_LABELS } from '../game/moveClassifier';
 import { MOTIF_LABELS, type MotifId } from '../tagging/motifs';
 
@@ -108,6 +109,19 @@ export default function GameReviewPage() {
     setPlyIndex(clamped);
     appliedInitialMove.current = true;
   }, [mainline, searchParams]);
+
+  // Credit a mistake review for journey progress when navigating from
+  // the Mistakes page (detected by the ?move= param).
+  const reviewCredited = useRef(false);
+  const recordMistakeReview = useProfileStore((s) => s.recordMistakeReview);
+  const authStatus = useAuthStore((s) => s.status);
+  useEffect(() => {
+    if (reviewCredited.current) return;
+    if (authStatus !== 'authenticated') return;
+    if (!searchParams.get('move')) return;
+    reviewCredited.current = true;
+    recordMistakeReview();
+  }, [authStatus, searchParams, recordMistakeReview]);
 
   // Keyboard navigation.
   useEffect(() => {

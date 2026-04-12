@@ -1,18 +1,27 @@
 /**
- * Phase 10 HomePage — landing page with hero and feature pitch.
+ * HomePage — three rendering states based on auth + journey:
  *
- * Shows a short pitch, quick-start CTA to jump into a game, and
- * a summary of recent activity (total games, current ACPL trend).
+ *   1. Not logged in → generic hero + feature cards.
+ *   2. Logged in, not calibrated → journey pitch + level ladder + CTA.
+ *   3. Logged in, calibrated → JourneyCard + stats + feature cards.
  */
 
 import { NavLink } from 'react-router-dom';
+import { useAuthStore } from '../auth/authStore';
 import { useProfileStore } from '../profile/profileStore';
-import { acplToRating, ratingStanding } from '../lib/rating';
+import { acplToRating, ratingStanding, ALL_LEVELS } from '../lib/rating';
+import JourneyCard from '../components/JourneyCard';
+import PromotionBanner from '../components/PromotionBanner';
+import CalibrationCard from '../components/CalibrationCard';
 
 export default function HomePage() {
+  const authStatus = useAuthStore((s) => s.status);
+  const isAuthenticated = authStatus === 'authenticated';
+
   const totalGames = useProfileStore((s) => s.profile.totalGames);
   const totalMoves = useProfileStore((s) => s.profile.totalMoves);
   const acplHistory = useProfileStore((s) => s.profile.acplHistory);
+  const journey = useProfileStore((s) => s.profile.journeyState);
 
   const latestAcpl =
     acplHistory.length > 0
@@ -21,6 +30,85 @@ export default function HomePage() {
   const latestRating = latestAcpl != null ? acplToRating(latestAcpl) : null;
   const latestStanding = latestRating != null ? ratingStanding(latestRating) : null;
 
+  const calibrated = isAuthenticated && journey?.calibrated;
+  const inCalibration = isAuthenticated && !journey?.calibrated;
+
+  // ── State 2: Logged in, not yet calibrated ──────────────────────
+  if (inCalibration) {
+    return (
+      <main className="mx-auto flex max-w-3xl flex-1 flex-col items-center gap-10 p-6">
+        <section className="flex max-w-xl flex-col items-center gap-4 text-center">
+          <h1 className="text-3xl font-extrabold tracking-tight text-slate-100">
+            Your Chess Journey Starts Here
+          </h1>
+          <p className="text-base leading-relaxed text-slate-400">
+            Chesster tracks your games, finds your weaknesses, and helps you
+            improve step by step. Play 2 games and we'll find your starting
+            level.
+          </p>
+        </section>
+
+        <CalibrationCard />
+
+        {/* Level ladder preview */}
+        <section className="w-full max-w-lg">
+          <h2 className="mb-3 text-center text-sm font-semibold uppercase tracking-wider text-slate-500">
+            The Journey
+          </h2>
+          <div className="flex flex-col gap-2">
+            {ALL_LEVELS.map((level, i) => (
+              <div
+                key={level.key}
+                className="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-3"
+              >
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-800 text-xs font-bold text-slate-400">
+                  {i + 1}
+                </span>
+                <div>
+                  <span className="text-sm font-semibold text-slate-200">
+                    {level.name}
+                  </span>
+                  <span className="ml-2 text-xs text-slate-500">
+                    {level.floor > 0 ? `${level.floor}+` : '< 900'}
+                  </span>
+                  <p className="text-xs text-slate-400">{level.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <FeatureCards />
+      </main>
+    );
+  }
+
+  // ── State 3: Logged in, calibrated ──────────────────────────────
+  if (calibrated) {
+    return (
+      <main className="mx-auto flex max-w-3xl flex-1 flex-col gap-8 p-6">
+        <PromotionBanner />
+        <JourneyCard />
+
+        {/* Quick stats */}
+        {totalGames > 0 && (
+          <section className="grid grid-cols-3 gap-4">
+            <StatCard label="Games played" value={String(totalGames)} />
+            <StatCard label="Moves analyzed" value={String(totalMoves)} />
+            <StatCard
+              label="Latest Rating"
+              value={latestRating != null ? String(latestRating) : '—'}
+              subtitle={latestStanding ?? undefined}
+            />
+          </section>
+        )}
+
+        <FeatureCards />
+      </main>
+    );
+  }
+
+  // ── State 1: Not logged in (default) ────────────────────────────
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-10 p-6">
       {/* Hero */}
@@ -53,28 +141,33 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* Feature cards */}
-      <section className="grid w-full max-w-2xl grid-cols-1 gap-4 sm:grid-cols-3">
-        <FeatureCard
-          title="AI Coach"
-          description="Get personalized explanations for every mistake, powered by Claude."
-          linkTo="/play"
-          linkLabel="Start playing"
-        />
-        <FeatureCard
-          title="Game Library"
-          description="Revisit any game, replay your moves, and learn from every mistake."
-          linkTo="/library"
-          linkLabel="View library"
-        />
-        <FeatureCard
-          title="Your Profile"
-          description="Track your rating, top weaknesses, and see how you stack up."
-          linkTo="/profile"
-          linkLabel="View profile"
-        />
-      </section>
+      <FeatureCards />
     </main>
+  );
+}
+
+function FeatureCards() {
+  return (
+    <section className="grid w-full max-w-2xl grid-cols-1 gap-4 sm:grid-cols-3">
+      <FeatureCard
+        title="AI Coach"
+        description="Get personalized explanations for every mistake, powered by Claude."
+        linkTo="/play"
+        linkLabel="Start playing"
+      />
+      <FeatureCard
+        title="Game Library"
+        description="Revisit any game, replay your moves, and learn from every mistake."
+        linkTo="/library"
+        linkLabel="View library"
+      />
+      <FeatureCard
+        title="Your Profile"
+        description="Track your rating, top weaknesses, and see how you stack up."
+        linkTo="/profile"
+        linkLabel="View profile"
+      />
+    </section>
   );
 }
 
