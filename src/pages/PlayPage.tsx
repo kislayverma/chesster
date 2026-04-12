@@ -29,11 +29,9 @@ export default function PlayPage() {
   const currentNodeId = useGameStore((s) => s.currentNodeId);
 
   const tree = useGameStore((s) => s.tree);
-  const engineEnabled = useGameStore((s) => s.engineEnabled);
   const humanColor = useGameStore((s) => s.humanColor);
   const skillLevel = useGameStore((s) => s.skillLevel);
   const thinking = useGameStore((s) => s.thinking);
-  const setEngineEnabled = useGameStore((s) => s.setEngineEnabled);
   const setHumanColor = useGameStore((s) => s.setHumanColor);
   const setSkillLevel = useGameStore((s) => s.setSkillLevel);
 
@@ -152,20 +150,10 @@ export default function PlayPage() {
       <aside className="flex flex-col gap-4 lg:w-64">
         <div className="rounded border border-slate-800 bg-slate-900/40 p-4">
           <h2 className="mb-3 text-sm font-semibold text-slate-200">
-            Stockfish
+            Game settings
           </h2>
 
-          <label className="flex items-center justify-between gap-2 text-xs text-slate-300">
-            <span>Engine opponent</span>
-            <input
-              type="checkbox"
-              checked={engineEnabled}
-              onChange={(e) => setEngineEnabled(e.target.checked)}
-              className="h-4 w-4 accent-slate-400"
-            />
-          </label>
-
-          <div className="mt-3">
+          <div>
             <div className="mb-1 text-xs text-slate-400">Play as</div>
             <div className="flex gap-2">
               <button
@@ -195,7 +183,7 @@ export default function PlayPage() {
 
           <div className="mt-3">
             <div className="mb-1 flex items-center justify-between text-xs text-slate-400">
-              <span>Skill level</span>
+              <span>AI skill level</span>
               <span className="font-mono tabular-nums text-slate-200">
                 {skillLevel}
               </span>

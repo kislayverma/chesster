@@ -107,7 +107,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <main className="flex flex-1 flex-col gap-6 p-6">
+    <main className="mx-auto flex max-w-3xl flex-1 flex-col gap-6 p-6">
       <header>
         <h1 className="text-2xl font-bold tracking-tight text-slate-100">Settings</h1>
         <p className="mt-1 text-sm text-slate-400">
@@ -116,7 +116,7 @@ export default function SettingsPage() {
         </p>
       </header>
 
-      <section className="max-w-2xl rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+      <section className="w-full rounded-lg border border-slate-800 bg-slate-900/40 p-5">
         <h2 className="text-lg font-semibold text-slate-100">Anthropic API key (BYOK)</h2>
         <p className="mt-2 text-sm leading-relaxed text-slate-400">
           {MODE_DESCRIPTIONS[mode]}
@@ -220,7 +220,7 @@ function EngineDefaultsCard() {
   const setSkillLevel = useGameStore((s) => s.setSkillLevel);
 
   return (
-    <section className="max-w-2xl rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+    <section className="w-full rounded-lg border border-slate-800 bg-slate-900/40 p-5">
       <h2 className="text-lg font-semibold text-slate-100">Engine defaults</h2>
       <p className="mt-2 text-sm leading-relaxed text-slate-400">
         These settings apply to the current and future games on this device.
@@ -295,7 +295,7 @@ function DataManagementCard() {
   }, [clearProfile]);
 
   return (
-    <section className="max-w-2xl rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+    <section className="w-full rounded-lg border border-slate-800 bg-slate-900/40 p-5">
       <h2 className="text-lg font-semibold text-slate-100">Data management</h2>
       <p className="mt-2 text-sm leading-relaxed text-slate-400">
         Your profile and games are always available. Sign in to sync across devices.
