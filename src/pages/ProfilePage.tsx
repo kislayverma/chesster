@@ -39,10 +39,11 @@ export default function ProfilePage() {
   const hydrated = useProfileStore((s) => s.hydrated);
   const clearProfile = useProfileStore((s) => s.clearProfile);
   const authStatus = useAuthStore((s) => s.status);
+  const syncing = useAuthStore((s) => s.syncing);
   const isAuthenticated = authStatus === 'authenticated';
   const journey = profile.journeyState;
 
-  if (!hydrated) {
+  if (!hydrated || syncing) {
     return (
       <main className="flex flex-1 items-center justify-center p-3 md:p-6">
         <p className="text-sm text-slate-500">Loading profile...</p>

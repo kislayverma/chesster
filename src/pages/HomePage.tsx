@@ -25,6 +25,7 @@ const LEVEL_PIECES: Record<string, string> = {
 
 export default function HomePage() {
   const authStatus = useAuthStore((s) => s.status);
+  const syncing = useAuthStore((s) => s.syncing);
   const isAuthenticated = authStatus === 'authenticated';
 
   const totalGames = useProfileStore((s) => s.profile.totalGames);
@@ -41,6 +42,16 @@ export default function HomePage() {
 
   const calibrated = isAuthenticated && journey?.calibrated;
   const inCalibration = isAuthenticated && !journey?.calibrated;
+
+  // While the remote profile is being fetched, show a loading state so
+  // we don't flash stale data from a previous session.
+  if (syncing) {
+    return (
+      <main className="flex flex-1 items-center justify-center p-3 md:p-6">
+        <p className="text-sm text-slate-500">Loading your profile...</p>
+      </main>
+    );
+  }
 
   // ── State 2: Logged in, not yet calibrated ──────────────────────
   if (inCalibration) {
