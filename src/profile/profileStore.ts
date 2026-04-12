@@ -119,14 +119,18 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
 
   replaceProfile: (next) => {
     // If the local journey state is more advanced (more calibration
-    // games or more games at current level), keep it. This prevents a
-    // stale remote pull from wiping local progress during the debounce
-    // window after a game finishes.
+    // games, already calibrated, or more total games), keep it. This
+    // prevents a stale remote pull from wiping local progress during
+    // the debounce window after a game finishes or when the server
+    // has an empty '{}' journey_state.
     const local = get().profile.journeyState;
-    if (local && next.journeyState) {
+    const remote = next.journeyState;
+    if (local) {
+      const localPlayed = local.calibrationGamesPlayed ?? 0;
+      const remotePlayed = remote?.calibrationGamesPlayed ?? 0;
       const localMoreAdvanced =
-        local.calibrationGamesPlayed > next.journeyState.calibrationGamesPlayed ||
-        (local.calibrated && !next.journeyState.calibrated);
+        localPlayed > remotePlayed ||
+        (local.calibrated && !remote?.calibrated);
       if (localMoreAdvanced) {
         next = { ...next, journeyState: local };
       }
@@ -157,7 +161,14 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
   finishGame: (acpl) => {
     const next = recordGameFinished(get().profile, acpl);
     set({ profile: next });
-    scheduleSave(next);
+    // Flush immediately (no debounce) so the journey state reaches
+    // IndexedDB + Supabase before any remote hydration can race.
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    void saveProfile(next);
+    pushProfileRemote(next);
   },
 
   dismissPromotion: () => {

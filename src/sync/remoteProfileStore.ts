@@ -35,6 +35,13 @@ import type { MotifId } from '../tagging/motifs';
 import type { MoveQuality } from '../game/moveClassifier';
 import type { GamePhase } from '../tagging/phaseDetector';
 
+/** Check that a journey_state value from the DB has the required fields. */
+function isValidJourneyState(v: unknown): boolean {
+  if (!v || typeof v !== 'object') return false;
+  const obj = v as Record<string, unknown>;
+  return typeof obj.calibrationGamesPlayed === 'number';
+}
+
 interface ProfileRow {
   user_id: string;
   total_games: number;
@@ -209,8 +216,8 @@ export async function loadProfileRemote(
     acplHistory: Array.isArray(row?.acpl_history)
       ? (row!.acpl_history as PlayerProfile['acplHistory'])
       : [],
-    journeyState: row?.journey_state
-      ? (row.journey_state as PlayerProfile['journeyState'])
+    journeyState: isValidJourneyState(row?.journey_state)
+      ? (row!.journey_state as PlayerProfile['journeyState'])
       : {
           calibrationGamesPlayed: 0,
           calibrated: false,

@@ -36,47 +36,26 @@ export default function HomePage() {
   // ── State 2: Logged in, not yet calibrated ──────────────────────
   if (inCalibration) {
     return (
-      <main className="mx-auto flex max-w-3xl flex-1 flex-col items-center gap-10 p-6">
-        <section className="flex max-w-xl flex-col items-center gap-4 text-center">
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-100">
-            Your Chess Journey Starts Here
-          </h1>
-          <p className="text-base leading-relaxed text-slate-400">
-            Chesster tracks your games, finds your weaknesses, and helps you
-            improve step by step. Play 2 games and we'll find your starting
-            level.
-          </p>
-        </section>
-
-        <CalibrationCard />
-
-        {/* Level ladder preview */}
-        <section className="w-full max-w-lg">
-          <h2 className="mb-3 text-center text-sm font-semibold uppercase tracking-wider text-slate-500">
-            The Journey
-          </h2>
-          <div className="flex flex-col gap-2">
-            {ALL_LEVELS.map((level, i) => (
-              <div
-                key={level.key}
-                className="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-3"
-              >
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-800 text-xs font-bold text-slate-400">
-                  {i + 1}
-                </span>
-                <div>
-                  <span className="text-sm font-semibold text-slate-200">
-                    {level.name}
-                  </span>
-                  <span className="ml-2 text-xs text-slate-500">
-                    {level.floor > 0 ? `${level.floor}+` : '< 900'}
-                  </span>
-                  <p className="text-xs text-slate-400">{level.description}</p>
-                </div>
-              </div>
-            ))}
+      <main className="mx-auto flex max-w-4xl flex-1 flex-col gap-10 p-6">
+        {/* Hero row: heading + calibration card side by side */}
+        <section className="flex flex-col gap-6 sm:flex-row sm:items-start sm:gap-8">
+          <div className="flex-1">
+            <h1 className="text-3xl font-extrabold tracking-tight text-slate-100">
+              Your Chess Journey Starts Here
+            </h1>
+            <p className="mt-2 text-base leading-relaxed text-slate-400">
+              Chesster tracks your games, finds your weaknesses, and helps you
+              improve step by step. Play 2 games and we'll find your starting
+              level.
+            </p>
+          </div>
+          <div className="sm:w-72 sm:flex-shrink-0">
+            <CalibrationCard />
           </div>
         </section>
+
+        {/* Horizontal journey ladder with chess pieces */}
+        <JourneyLadder />
 
         <FeatureCards />
       </main>
@@ -190,6 +169,51 @@ function StatCard({
         <span className="mt-0.5 text-[10px] text-slate-500">{subtitle}</span>
       )}
     </div>
+  );
+}
+
+/** Chess piece SVGs for each level (white pieces on dark bg). */
+const LEVEL_PIECES: Record<string, string> = {
+  newcomer: '\u2659',        // white pawn
+  learner: '\u2658',         // white knight
+  clubPlayer: '\u2657',      // white bishop
+  competitor: '\u2656',      // white rook
+  advancedThinker: '\u2655', // white queen
+  expert: '\u2654',          // white king
+};
+
+function JourneyLadder() {
+  return (
+    <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+      <h2 className="mb-4 text-center text-sm font-semibold uppercase tracking-wider text-slate-500">
+        The Journey
+      </h2>
+      <div className="flex items-start justify-between gap-1">
+        {ALL_LEVELS.map((level, i) => (
+          <div key={level.key} className="flex flex-1 flex-col items-center gap-1">
+            {/* Piece */}
+            <span className="text-3xl leading-none text-slate-400 sm:text-4xl">
+              {LEVEL_PIECES[level.key] ?? '?'}
+            </span>
+            {/* Connector line (except after the last) */}
+            {i < ALL_LEVELS.length - 1 && (
+              <div className="absolute" />
+            )}
+            {/* Label */}
+            <span className="text-[11px] font-semibold text-slate-200 text-center leading-tight">
+              {level.name}
+            </span>
+            <span className="text-[10px] text-slate-500">
+              {level.floor > 0 ? `${level.floor}+` : '< 900'}
+            </span>
+          </div>
+        ))}
+      </div>
+      {/* Connecting track */}
+      <div className="mx-auto mt-1 flex items-center px-[8%]">
+        <div className="h-px flex-1 bg-slate-700" />
+      </div>
+    </section>
   );
 }
 
