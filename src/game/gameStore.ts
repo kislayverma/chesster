@@ -47,6 +47,7 @@ import {
 import { detectPhase } from '../tagging/phaseDetector';
 import { tagMove } from '../tagging/tagMove';
 import { getCoachExplanation } from '../coach/coachClient';
+import { isBookMove } from '../tagging/ecoLookup';
 import type { MotifId } from '../tagging/motifs';
 import {
   createTree,
@@ -68,6 +69,7 @@ import {
 } from './gameTree';
 import { MAX_ANON_BRANCHES } from '../lib/branchLimit';
 import { useProfileStore } from '../profile/profileStore';
+import { usePracticeStore } from '../srs/practiceStore';
 import type { WeaknessEvent } from '../profile/types';
 import { saveGame } from './gameStorage';
 import { pushGameRemote } from '../sync/syncOrchestrator';
@@ -196,6 +198,10 @@ export interface CoachState {
   lastMoveCpLoss: number | null;
   /** Pre-move engine best move in UCI — used by the "Try this line" button. */
   lastMoveBestMoveBefore: string | null;
+  /** Source square of the last move (for board highlight). */
+  lastMoveFrom: string | null;
+  /** Target square of the last move (for board highlight). */
+  lastMoveTo: string | null;
 }
 
 export interface TreeState {
@@ -247,6 +253,11 @@ interface GameStore
    * tree; other branches are still reachable via MoveList.
    */
   undo: () => void;
+
+  /** Navigate one ply backwards (towards root). Does NOT trigger engine play. */
+  goBack: () => void;
+  /** Navigate one ply forwards (towards the tip of the current line). */
+  goForward: () => void;
 
   setEngineEnabled: (on: boolean) => void;
   setHumanColor: (color: 'w' | 'b') => void;
@@ -316,6 +327,8 @@ const EMPTY_COACH_STATE: CoachState = {
   lastMoveCoachSource: null,
   lastMoveCpLoss: null,
   lastMoveBestMoveBefore: null,
+  lastMoveFrom: null,
+  lastMoveTo: null,
 };
 
 /**
@@ -344,6 +357,8 @@ function navState(
     lastMoveCoachSource: node.coachSource,
     lastMoveCpLoss: node.cpLoss,
     lastMoveBestMoveBefore: node.bestMoveBeforeUci,
+    lastMoveFrom: node.uci ? node.uci.slice(0, 2) : null,
+    lastMoveTo: node.uci ? node.uci.slice(2, 4) : null,
   };
 }
 
@@ -470,95 +485,130 @@ export const useGameStore = create<GameStore>((set, get) => {
         // right after a HUMAN move. Engine moves and navigations are
         // not coached.
         if (humanMove) {
-          const classifyResult = classifyMove({
-            evalBeforeCp: humanMove.evalBeforeCp,
-            evalBeforeMate: humanMove.evalBeforeMate,
-            evalAfterCp: evalCp,
-            evalAfterMate: mate,
-            moverColor: humanMove.moverColor,
-          });
-          const quality = classifyResult.quality;
+          // Phase 12: check if this move falls in a known opening line.
+          // If so, skip the full classification pipeline and label it
+          // 'book'. The SAN history is derived from the path to the
+          // human move's node.
+          const { tree: treeForBook } = get();
+          const pathToNode = pathFromRoot(treeForBook, humanMove.nodeId);
+          const sanMoves = pathToNode
+            .filter((n) => n.parentId !== null && n.move)
+            .map((n) => n.move);
+          const ply = sanMoves.length;
 
-          if (quality) {
-            const bestMoveSan = humanMove.bestMoveBeforeUci
-              ? uciToSan(humanMove.bestMoveBeforeUci, humanMove.fenBefore)
-              : '';
-            const phase = detectPhase(humanMove.fenBefore);
-            const motifs = await tagMove({
-              fenBefore: humanMove.fenBefore,
-              fenAfter: fen,
-              playerMoveUci: humanMove.playerMoveUci,
-              bestMoveBeforeUci: humanMove.bestMoveBeforeUci,
+          if (isBookMove(sanMoves, ply)) {
+            // Tag as book — no cpLoss, no motifs, no coach text.
+            updateNode(treeForBook, humanMove.nodeId, {
+              quality: 'book',
+              motifs: [],
+              coachText: null,
+              coachSource: null,
+              cpLoss: 0,
+            });
+            if (get().currentNodeId === humanMove.nodeId) {
+              set({
+                lastMoveQuality: 'book',
+                lastMoveMotifs: [],
+                lastMoveCoachText: null,
+                lastMoveCoachSource: null,
+                lastMoveCpLoss: 0,
+              });
+            }
+          } else {
+            const classifyResult = classifyMove({
               evalBeforeCp: humanMove.evalBeforeCp,
               evalBeforeMate: humanMove.evalBeforeMate,
               evalAfterCp: evalCp,
               evalAfterMate: mate,
-              pvAfter: result.pv,
               moverColor: humanMove.moverColor,
-              quality,
             });
-            const coach = await getCoachExplanation({
-              fenBefore: humanMove.fenBefore,
-              playerMove: humanMove.playerMoveSan,
-              bestMove: bestMoveSan,
-              pv: result.pv,
-              quality,
-              cpLoss: classifyResult.cpLoss,
-              motifs,
-              phase,
-            });
+            const quality = classifyResult.quality;
 
-            if (seq !== analysisSeq) return;
-
-            // Cache on the node so re-navigation restores it.
-            const { tree: t2 } = get();
-            updateNode(t2, humanMove.nodeId, {
-              quality,
-              motifs,
-              coachText: coach.text,
-              coachSource: coach.source,
-              cpLoss: classifyResult.cpLoss,
-            });
-
-            // ---- Phase 5: feed the weakness profile ----
-            const profile = useProfileStore.getState();
-            profile.incrementMoves();
-            if (
-              quality === 'inaccuracy' ||
-              quality === 'mistake' ||
-              quality === 'blunder'
-            ) {
-              const humanNode = getNode(t2, humanMove.nodeId);
-              const event: WeaknessEvent = {
-                id: `${t2.id}:${humanMove.nodeId}`,
-                gameId: t2.id,
-                moveNumber: Math.ceil(humanNode.ply / 2),
-                fen: humanMove.fenBefore,
+            if (quality) {
+              const bestMoveSan = humanMove.bestMoveBeforeUci
+                ? uciToSan(humanMove.bestMoveBeforeUci, humanMove.fenBefore)
+                : '';
+              const phase = detectPhase(humanMove.fenBefore);
+              const motifs = await tagMove({
+                fenBefore: humanMove.fenBefore,
+                fenAfter: fen,
+                playerMoveUci: humanMove.playerMoveUci,
+                bestMoveBeforeUci: humanMove.bestMoveBeforeUci,
+                evalBeforeCp: humanMove.evalBeforeCp,
+                evalBeforeMate: humanMove.evalBeforeMate,
+                evalAfterCp: evalCp,
+                evalAfterMate: mate,
+                pvAfter: result.pv,
+                moverColor: humanMove.moverColor,
+                quality,
+              });
+              const coach = await getCoachExplanation({
+                fenBefore: humanMove.fenBefore,
                 playerMove: humanMove.playerMoveSan,
                 bestMove: bestMoveSan,
-                cpLoss: classifyResult.cpLoss,
+                pv: result.pv,
                 quality,
-                phase,
+                cpLoss: classifyResult.cpLoss,
                 motifs,
-                color: humanMove.moverColor === 'w' ? 'white' : 'black',
-                timestamp: Date.now(),
-              };
-              profile.addWeaknessEvent(event);
-            }
-
-            // Only reflect on the live store fields if we're still
-            // viewing the move in question.
-            if (get().currentNodeId === humanMove.nodeId) {
-              set({
-                lastMoveQuality: quality,
-                lastMoveMotifs: motifs,
-                lastMoveCoachText: coach.text,
-                lastMoveCoachSource: coach.source,
-                lastMoveCpLoss: classifyResult.cpLoss,
-                lastMoveBestMoveBefore: humanMove.bestMoveBeforeUci,
+                phase,
               });
+
+              if (seq !== analysisSeq) return;
+
+              // Cache on the node so re-navigation restores it.
+              const { tree: t2 } = get();
+              updateNode(t2, humanMove.nodeId, {
+                quality,
+                motifs,
+                coachText: coach.text,
+                coachSource: coach.source,
+                cpLoss: classifyResult.cpLoss,
+              });
+
+              // ---- Phase 5: feed the weakness profile ----
+              const profile = useProfileStore.getState();
+              profile.incrementMoves();
+              if (
+                quality === 'inaccuracy' ||
+                quality === 'mistake' ||
+                quality === 'blunder'
+              ) {
+                const humanNode = getNode(t2, humanMove.nodeId);
+                const event: WeaknessEvent = {
+                  id: `${t2.id}:${humanMove.nodeId}`,
+                  gameId: t2.id,
+                  moveNumber: Math.ceil(humanNode.ply / 2),
+                  fen: humanMove.fenBefore,
+                  playerMove: humanMove.playerMoveSan,
+                  bestMove: bestMoveSan,
+                  cpLoss: classifyResult.cpLoss,
+                  quality,
+                  phase,
+                  motifs,
+                  color: humanMove.moverColor === 'w' ? 'white' : 'black',
+                  timestamp: Date.now(),
+                };
+                profile.addWeaknessEvent(event);
+
+                // Phase 6: auto-generate an SRS practice card for this
+                // mistake. `addCard` deduplicates on `event.id`.
+                usePracticeStore.getState().addCard(event);
+              }
+
+              // Only reflect on the live store fields if we're still
+              // viewing the move in question.
+              if (get().currentNodeId === humanMove.nodeId) {
+                set({
+                  lastMoveQuality: quality,
+                  lastMoveMotifs: motifs,
+                  lastMoveCoachText: coach.text,
+                  lastMoveCoachSource: coach.source,
+                  lastMoveCpLoss: classifyResult.cpLoss,
+                  lastMoveBestMoveBefore: humanMove.bestMoveBeforeUci,
+                });
+              }
             }
-          }
+          } // end else (non-book)
 
           // Opportunistic game save after every classified human move.
           const saveState = get();
@@ -586,6 +636,11 @@ export const useGameStore = create<GameStore>((set, get) => {
         ) {
           return;
         }
+
+        // Brief pause so the player can see their own move before the
+        // engine replies instantly. 400ms feels natural.
+        await new Promise((r) => setTimeout(r, 400));
+        if (seq !== analysisSeq) return; // stale after pause
 
         // Apply engine move to the tree, extending wherever we are.
         const engineUci = result.bestMove;
@@ -665,6 +720,8 @@ export const useGameStore = create<GameStore>((set, get) => {
           history: pathFromRoot(t3, targetId).slice(1),
           ...snap,
           lastBestMove: null,
+          lastMoveFrom: engineMove.from,
+          lastMoveTo: engineMove.to,
           // Keep the human's coach state pinned until the NEXT human move.
         });
 
@@ -798,6 +855,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         ...snap,
         lastBestMove: null,
         ...EMPTY_COACH_STATE,
+        lastMoveFrom: from,
+        lastMoveTo: to,
       });
 
       kickAnalysis(fenAfter, snap.turn, seq, {
@@ -1030,6 +1089,49 @@ export const useGameStore = create<GameStore>((set, get) => {
         targetId = parentNode.parentId;
       }
 
+      tree.currentNodeId = targetId;
+      analysisSeq += 1;
+      const seq = analysisSeq;
+      set({
+        ...navState(tree, targetId),
+        tree: { ...tree },
+        thinking: false,
+        lastBestMove: null,
+        evalCp: 0,
+        mate: null,
+        evalDepth: 0,
+      });
+      const snap = snapshotFromFen(getNode(tree, targetId).fen);
+      kickObservation(snap.fen, snap.turn, seq);
+    },
+
+    goBack: () => {
+      const { tree, currentNodeId } = get();
+      const current = getNode(tree, currentNodeId);
+      if (!current.parentId) return; // at root
+      const targetId = current.parentId;
+      tree.currentNodeId = targetId;
+      analysisSeq += 1;
+      const seq = analysisSeq;
+      set({
+        ...navState(tree, targetId),
+        tree: { ...tree },
+        thinking: false,
+        lastBestMove: null,
+        evalCp: 0,
+        mate: null,
+        evalDepth: 0,
+      });
+      const snap = snapshotFromFen(getNode(tree, targetId).fen);
+      kickObservation(snap.fen, snap.turn, seq);
+    },
+
+    goForward: () => {
+      const { tree, currentNodeId } = get();
+      const current = getNode(tree, currentNodeId);
+      if (current.childrenIds.length === 0) return; // at tip
+      // Follow the first child (mainline continuation).
+      const targetId = current.childrenIds[0];
       tree.currentNodeId = targetId;
       analysisSeq += 1;
       const seq = analysisSeq;

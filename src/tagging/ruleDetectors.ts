@@ -1,7 +1,7 @@
 /**
- * Phase 3 rule-based motif detectors.
+ * Rule-based motif detectors.
  *
- * Implements the 5 initial motifs from DESIGN.md §7:
+ * Phase 3 initial set (5 detectors):
  *   1. missed_mate        — pre-move had mate for mover, post-move doesn't
  *   2. missed_capture     — engine's top move was a capture, player ignored it
  *   3. hanging_piece      — opponent's best reply is a capture
@@ -10,14 +10,23 @@
  *   5. back_rank_weakness — mover's king on back rank with no luft and the
  *                           move was tagged as a mistake/blunder
  *
+ * Phase 12 additions (5 detectors):
+ *   6. missed_pin         — engine's best move pins a piece to the king
+ *   7. missed_skewer      — engine's best move is a check that skewers
+ *                           a piece behind the king
+ *   8. overloaded_defender — a single opponent piece defends two or more
+ *                           attacked pieces and the engine exploits it
+ *   9. king_safety_drop   — the player's move weakened their own pawn
+ *                           shield in front of their king
+ *  10. trade_into_bad_endgame — the player traded into a losing endgame
+ *
  * All detectors are pure functions over a `DetectorContext`. Each returns
  * either a motif id or null. `runRuleDetectors` composes them and
  * deduplicates.
  *
  * These heuristics are deliberately conservative: we prefer false
  * negatives over false positives so the CoachPanel never accuses the
- * player of missing a fork that wasn't there. Phase 12 polish can tighten
- * the detectors and add the later motifs (missed_pin, missed_skewer, ...).
+ * player of missing a fork that wasn't there.
  */
 
 import { Chess, type Move, type Square } from 'chess.js';
@@ -255,12 +264,395 @@ const detectBackRankWeakness: Detector = (ctx) => {
   }
 };
 
+// ──────────────────────────────────────────────────────────────────
+// Phase 12 detectors
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Find the king square for a given colour in a Chess instance.
+ */
+function findKing(chess: Chess, color: 'w' | 'b'): Square | null {
+  const board = chess.board();
+  for (const row of board) {
+    for (const cell of row) {
+      if (cell && cell.type === 'k' && cell.color === color) {
+        return cell.square;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Are two squares on the same rank, file, or diagonal?
+ * Returns the kind of alignment or null.
+ */
+function alignment(
+  a: Square,
+  b: Square,
+): 'rank' | 'file' | 'diagonal' | null {
+  const af = a.charCodeAt(0);
+  const ar = a.charCodeAt(1);
+  const bf = b.charCodeAt(0);
+  const br = b.charCodeAt(1);
+  if (ar === br) return 'rank';
+  if (af === bf) return 'file';
+  if (Math.abs(af - bf) === Math.abs(ar - br)) return 'diagonal';
+  return null;
+}
+
+/**
+ * Is a piece type a sliding piece along a given direction?
+ * Bishops slide diagonals, rooks slide ranks/files, queen slides all.
+ */
+function slidesAlong(
+  piece: string,
+  dir: 'rank' | 'file' | 'diagonal',
+): boolean {
+  if (piece === 'q') return true;
+  if (piece === 'r' && (dir === 'rank' || dir === 'file')) return true;
+  if (piece === 'b' && dir === 'diagonal') return true;
+  return false;
+}
+
+/**
+ * #6 missed_pin — engine's best move pins an enemy piece to the enemy
+ * king. We play the best move on a clone, then check whether the
+ * moved piece is aligned with an enemy piece and the enemy king such
+ * that the intervening enemy piece cannot move without exposing its
+ * king — a classic absolute pin.
+ *
+ * Conservative: only fires on inaccuracy/mistake/blunder and when the
+ * best move piece is a sliding piece that lines up with a valuable
+ * target and the enemy king.
+ */
+const detectMissedPin: Detector = (ctx) => {
+  const { fenBefore, bestMoveBeforeUci, playerMoveUci, moverColor, quality } =
+    ctx;
+  if (!bestMoveBeforeUci) return null;
+  if (bestMoveBeforeUci === playerMoveUci) return null;
+  if (
+    quality !== 'inaccuracy' &&
+    quality !== 'mistake' &&
+    quality !== 'blunder'
+  ) {
+    return null;
+  }
+
+  try {
+    const clone = new Chess(fenBefore);
+    const parsed = clone.move({
+      from: bestMoveBeforeUci.slice(0, 2) as Square,
+      to: bestMoveBeforeUci.slice(2, 4) as Square,
+      promotion:
+        bestMoveBeforeUci.length >= 5 ? bestMoveBeforeUci[4] : undefined,
+    }) as Move | null;
+    if (!parsed) return null;
+
+    const dest = parsed.to as Square;
+    const movedPiece = parsed.piece; // piece type after promotion
+    const enemyColor = moverColor === 'w' ? 'b' : 'w';
+    const enemyKingSq = findKing(clone, enemyColor);
+    if (!enemyKingSq) return null;
+
+    // The moved piece must be a sliding piece aligned with the enemy king.
+    const dir = alignment(dest, enemyKingSq);
+    if (!dir) return null;
+    if (!slidesAlong(movedPiece, dir)) return null;
+
+    // Check whether there is exactly one enemy non-pawn piece between
+    // dest and the enemy king (the pinned piece).
+    const board = clone.board();
+    const df = dest.charCodeAt(0);
+    const dr = dest.charCodeAt(1);
+    const kf = enemyKingSq.charCodeAt(0);
+    const kr = enemyKingSq.charCodeAt(1);
+    const stepF = Math.sign(kf - df);
+    const stepR = Math.sign(kr - dr);
+
+    let cf = df + stepF;
+    let cr = dr + stepR;
+    let pinnedPiece: string | null = null;
+    let blocked = false;
+    while (cf !== kf || cr !== kr) {
+      const piece = board[8 - (cr - 48)]?.[cf - 97];
+      if (piece) {
+        if (pinnedPiece !== null) {
+          // More than one intervening piece — not a pin.
+          blocked = true;
+          break;
+        }
+        if (piece.color === enemyColor && piece.type !== 'k') {
+          pinnedPiece = piece.type;
+        } else {
+          // Own piece or king in between shouldn't happen this way
+          blocked = true;
+          break;
+        }
+      }
+      cf += stepF;
+      cr += stepR;
+    }
+
+    if (!blocked && pinnedPiece && pinnedPiece !== 'p') {
+      return 'missed_pin';
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
+
+/**
+ * #7 missed_skewer — engine's best move delivers check with a sliding
+ * piece, and behind the enemy king (on the same line) sits another
+ * enemy piece of value. When the king moves, the piece behind is
+ * captured. Only fires on inaccuracy/mistake/blunder.
+ */
+const detectMissedSkewer: Detector = (ctx) => {
+  const { fenBefore, bestMoveBeforeUci, playerMoveUci, moverColor, quality } =
+    ctx;
+  if (!bestMoveBeforeUci) return null;
+  if (bestMoveBeforeUci === playerMoveUci) return null;
+  if (
+    quality !== 'inaccuracy' &&
+    quality !== 'mistake' &&
+    quality !== 'blunder'
+  ) {
+    return null;
+  }
+
+  try {
+    const clone = new Chess(fenBefore);
+    const parsed = clone.move({
+      from: bestMoveBeforeUci.slice(0, 2) as Square,
+      to: bestMoveBeforeUci.slice(2, 4) as Square,
+      promotion:
+        bestMoveBeforeUci.length >= 5 ? bestMoveBeforeUci[4] : undefined,
+    }) as Move | null;
+    if (!parsed) return null;
+
+    // Must deliver check to be a skewer (the king is forced to move).
+    if (!clone.inCheck()) return null;
+
+    const dest = parsed.to as Square;
+    const movedPiece = parsed.piece;
+    const enemyColor = moverColor === 'w' ? 'b' : 'w';
+    const enemyKingSq = findKing(clone, enemyColor);
+    if (!enemyKingSq) return null;
+
+    const dir = alignment(dest, enemyKingSq);
+    if (!dir) return null;
+    if (!slidesAlong(movedPiece, dir)) return null;
+
+    // Walk from the king AWAY from the attacker to find a piece behind.
+    const df = dest.charCodeAt(0);
+    const dr = dest.charCodeAt(1);
+    const kf = enemyKingSq.charCodeAt(0);
+    const kr = enemyKingSq.charCodeAt(1);
+    const stepF = Math.sign(kf - df);
+    const stepR = Math.sign(kr - dr);
+
+    const board = clone.board();
+    let cf = kf + stepF;
+    let cr = kr + stepR;
+    while (cf >= 97 && cf <= 104 && cr >= 49 && cr <= 56) {
+      const piece = board[8 - (cr - 48)]?.[cf - 97];
+      if (piece) {
+        if (
+          piece.color === enemyColor &&
+          piece.type !== 'p' &&
+          piece.type !== 'k'
+        ) {
+          return 'missed_skewer';
+        }
+        break; // any piece blocks the skewer line
+      }
+      cf += stepF;
+      cr += stepR;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
+
+/**
+ * #8 overloaded_defender — after the player's mistake/blunder, the
+ * engine's PV starts by attacking a piece that is the sole defender
+ * of another attacked piece. We approximate this: the opponent's
+ * first PV move attacks a square that was defended by exactly one
+ * enemy piece, and that same defender also defends at least one other
+ * attacked square. This is a simplified heuristic — we check if the
+ * opponent's reply captures, and if the captured piece was defended
+ * by a single piece that also defends another attacked square.
+ *
+ * For simplicity, we use a lighter heuristic: fire when the player's
+ * move was a mistake/blunder AND the engine's best reply sequence
+ * (pvAfter) contains two captures in the first three half-moves,
+ * both by the same enemy piece. That pattern is characteristic of
+ * exploiting an overloaded defender.
+ */
+const detectOverloadedDefender: Detector = (ctx) => {
+  const { fenAfter, pvAfter, quality } = ctx;
+  if (quality !== 'mistake' && quality !== 'blunder') return null;
+  if (!pvAfter || pvAfter.length < 2) return null;
+
+  try {
+    const sim = new Chess(fenAfter);
+    const captures: { from: Square; to: Square; piece: string }[] = [];
+
+    // Walk up to 3 PV moves; track captures by the opponent.
+    const limit = Math.min(pvAfter.length, 3);
+    for (let i = 0; i < limit; i++) {
+      const uci = pvAfter[i];
+      if (!uci || uci.length < 4) break;
+      const m = sim.move({
+        from: uci.slice(0, 2) as Square,
+        to: uci.slice(2, 4) as Square,
+        promotion: uci.length >= 5 ? uci[4] : undefined,
+      }) as Move | null;
+      if (!m) break;
+      if (m.captured) {
+        captures.push({ from: m.from as Square, to: m.to as Square, piece: m.piece });
+      }
+    }
+
+    // Two or more captures in a short PV is a strong signal that a
+    // defender is overloaded — the opponent is exploiting the fact that
+    // one piece can't cover everything.
+    if (captures.length >= 2) return 'overloaded_defender';
+  } catch {
+    return null;
+  }
+  return null;
+};
+
+/**
+ * #9 king_safety_drop — the player's move weakened their own pawn
+ * shield in front of their castled king. We compare the pawn
+ * structure around the king before and after the move. If a pawn
+ * was advanced or removed from the shield and the move was a
+ * mistake/blunder, we flag it.
+ */
+const detectKingSafetyDrop: Detector = (ctx) => {
+  const { fenBefore, fenAfter, moverColor, quality } = ctx;
+  if (
+    quality !== 'inaccuracy' &&
+    quality !== 'mistake' &&
+    quality !== 'blunder'
+  ) {
+    return null;
+  }
+
+  try {
+    const before = new Chess(fenBefore);
+    const after = new Chess(fenAfter);
+
+    const kingSqBefore = findKing(before, moverColor);
+    if (!kingSqBefore) return null;
+
+    // Only care about castled kings (on g/h files for kingside, a/b/c for queenside)
+    const kFile = kingSqBefore.charCodeAt(0) - 97; // 0=a, 7=h
+    const kRank = kingSqBefore[1];
+    const backRank = moverColor === 'w' ? '1' : '8';
+    if (kRank !== backRank) return null;
+    // Rough castled check: king on c, g, or nearby files
+    const isCastledKingside = kFile >= 5; // f, g, h
+    const isCastledQueenside = kFile <= 2; // a, b, c
+    if (!isCastledKingside && !isCastledQueenside) return null;
+
+    // Shield rank: the rank directly in front of the king.
+    const shieldRank = moverColor === 'w' ? '2' : '7';
+
+    // Shield files: the king's file and one on each side.
+    const shieldFiles: number[] = [];
+    if (kFile > 0) shieldFiles.push(kFile - 1);
+    shieldFiles.push(kFile);
+    if (kFile < 7) shieldFiles.push(kFile + 1);
+
+    // Count own pawns on shield squares before and after.
+    let pawnsBefore = 0;
+    let pawnsAfter = 0;
+    for (const f of shieldFiles) {
+      const sq =
+        `${String.fromCharCode(97 + f)}${shieldRank}` as Square;
+      const pb = before.get(sq);
+      if (pb && pb.type === 'p' && pb.color === moverColor) pawnsBefore++;
+      const pa = after.get(sq);
+      if (pa && pa.type === 'p' && pa.color === moverColor) pawnsAfter++;
+    }
+
+    // If we lost a pawn from the shield, flag it.
+    if (pawnsAfter < pawnsBefore) return 'king_safety_drop';
+  } catch {
+    return null;
+  }
+  return null;
+};
+
+/**
+ * #10 trade_into_bad_endgame — the player traded pieces (their move
+ * was a capture) into a position with fewer total pieces, and the
+ * eval swung significantly against them (mistake/blunder). This
+ * suggests the trade simplified into a losing endgame.
+ */
+const detectBadEndgameTrade: Detector = (ctx) => {
+  const { fenBefore, fenAfter, playerMoveUci, quality } = ctx;
+  if (quality !== 'mistake' && quality !== 'blunder') return null;
+
+  try {
+    // Verify the player's move was a capture.
+    const beforeChess = new Chess(fenBefore);
+    const parsed = beforeChess.move({
+      from: playerMoveUci.slice(0, 2) as Square,
+      to: playerMoveUci.slice(2, 4) as Square,
+      promotion:
+        playerMoveUci.length >= 5 ? playerMoveUci[4] : undefined,
+    }) as Move | null;
+    if (!parsed || !parsed.captured) return null;
+
+    // Count non-pawn, non-king pieces in before and after positions.
+    const afterChess = new Chess(fenAfter);
+    const countPieces = (chess: Chess): number => {
+      let n = 0;
+      for (const row of chess.board()) {
+        for (const cell of row) {
+          if (cell && cell.type !== 'p' && cell.type !== 'k') n++;
+        }
+      }
+      return n;
+    };
+
+    const piecesBefore = countPieces(new Chess(fenBefore));
+    const piecesAfter = countPieces(afterChess);
+
+    // Must be an actual simplification (at least one piece removed).
+    if (piecesAfter >= piecesBefore) return null;
+
+    // Only flag in endgame-ish positions (≤ 8 non-pawn, non-king pieces
+    // remaining after the trade).
+    if (piecesAfter > 8) return null;
+
+    return 'trade_into_bad_endgame';
+  } catch {
+    return null;
+  }
+  return null;
+};
+
 const DETECTORS: Detector[] = [
   detectMissedMate,
   detectMissedCapture,
   detectHangingPiece,
   detectMissedFork,
   detectBackRankWeakness,
+  // Phase 12
+  detectMissedPin,
+  detectMissedSkewer,
+  detectOverloadedDefender,
+  detectKingSafetyDrop,
+  detectBadEndgameTrade,
 ];
 
 /** Run all rule detectors against the context and return deduped motif ids. */

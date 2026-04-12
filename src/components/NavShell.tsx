@@ -20,9 +20,13 @@ import { getLlmMode, subscribeLlmMode, type LlmMode } from '../lib/featureFlags'
 import { useAuthStore } from '../auth/authStore';
 
 const NAV_LINKS: Array<{ to: string; label: string }> = [
-  { to: '/', label: 'Play' },
+  { to: '/', label: 'Home' },
+  { to: '/play', label: 'Play' },
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/mistakes', label: 'Mistakes' },
+  { to: '/practice', label: 'Practice' },
+  { to: '/library', label: 'Library' },
+  { to: '/profile', label: 'Profile' },
   { to: '/settings', label: 'Settings' },
 ];
 
@@ -67,9 +71,6 @@ export default function NavShell() {
               </NavLink>
             ))}
           </nav>
-          <span className="text-xs text-slate-500">
-            Phase 7 — BYOK coach
-          </span>
         </div>
 
         <div className="flex items-center gap-2">

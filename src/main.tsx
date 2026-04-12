@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import './index.css';
 import { useProfileStore } from './profile/profileStore';
+import { usePracticeStore } from './srs/practiceStore';
 import { initLlmMode } from './lib/featureFlags';
 import { useAuthStore } from './auth/authStore';
 import { initSyncOrchestrator } from './sync/syncOrchestrator';
@@ -13,6 +14,10 @@ import { initSyncOrchestrator } from './sync/syncOrchestrator';
 // "not hydrated" mode and pages that care render a loading placeholder
 // until this resolves.
 void useProfileStore.getState().hydrate();
+
+// Phase 6: hydrate practice cards alongside the profile so
+// PracticePrompt knows the due-count at first render.
+void usePracticeStore.getState().hydrate();
 
 // Phase 7: hydrate the BYOK key from IndexedDB and probe /api/health
 // so the NavShell LLM badge and the coach/tagger know whether to use

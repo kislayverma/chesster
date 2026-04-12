@@ -42,9 +42,12 @@ import {
 import { isAlreadyMigrated } from './migrateAnonymous';
 import { loadProfileRemote, saveProfileRemote } from './remoteProfileStore';
 import { loadAllGamesRemote, saveGameRemote } from './remoteGameStore';
+import { loadAllCardsRemote, saveCardRemote } from './remotePracticeStore';
 import { writePersistedGame } from '../game/gameStorage';
 import { useProfileStore } from '../profile/profileStore';
+import { usePracticeStore } from '../srs/practiceStore';
 import type { PersistedGame, PlayerProfile } from '../profile/types';
+import type { PracticeCard } from '../srs/types';
 
 let initialized = false;
 
@@ -96,6 +99,13 @@ export async function hydrateFromRemote(userId: string): Promise<void> {
     for (const g of games) {
       await writePersistedGame(g);
     }
+
+    // Phase 6: pull practice cards last (they reference events which
+    // must already be in place for foreign-key integrity).
+    const cards = await loadAllCardsRemote(userId);
+    if (cards.length > 0) {
+      usePracticeStore.getState().replaceCards(cards);
+    }
   } catch (err) {
     console.warn('[syncOrchestrator] hydrate failed', err);
   } finally {
@@ -127,5 +137,18 @@ export function pushProfileRemote(profile: PlayerProfile): void {
   if (!userId) return;
   void saveProfileRemote(userId, profile).catch((err) => {
     console.warn('[syncOrchestrator] pushProfile failed', err);
+  });
+}
+
+/**
+ * Fire-and-forget: upsert a single `PracticeCard` to Supabase if the
+ * user is signed in. Called from `practiceStore` via the debounced
+ * save path (dynamically imported to break the load-time cycle).
+ */
+export function pushCardRemote(card: PracticeCard): void {
+  const userId = useAuthStore.getState().user?.id;
+  if (!userId) return;
+  void saveCardRemote(userId, card).catch((err) => {
+    console.warn('[syncOrchestrator] pushCard failed', err);
   });
 }

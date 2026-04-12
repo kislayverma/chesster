@@ -91,7 +91,7 @@ export default function LoginPage() {
           <p className="mt-3 text-sm leading-relaxed text-slate-400">
             This deployment was built without Supabase credentials, so cross-device
             sync and accounts are turned off. Everything else still works — your
-            games and weakness profile live in this browser's IndexedDB.
+            games and progress are still tracked — sign in later to sync across devices.
           </p>
           <p className="mt-4 text-xs text-slate-500">
             To enable sign-in, set{' '}

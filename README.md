@@ -8,7 +8,7 @@ For the full architecture and phase-by-phase TODO checklists see [`DESIGN.md`](.
 
 ## Status
 
-Phases 1 – 5, 7, 8, and 9 complete ✓. The app ships:
+Phases 1 – 9, 12 complete. The app ships:
 
 - Playable chess vs Stockfish (single-threaded lite, no COOP/COEP)
 - Real-time per-move coaching (`best` → `blunder` quality badges + arrows)
@@ -17,9 +17,11 @@ Phases 1 – 5, 7, 8, and 9 complete ✓. The app ships:
 - Phase 5 routing (`NavShell` + `/`, `/dashboard`, `/mistakes`, `/settings`)
 - Phase 7 BYOK LLM proxy — `/api/health`, `/api/explain-move`, `/api/tag-move` run on Vercel Edge with `@anthropic-ai/sdk`
 - Phase 8 production-ready Vercel config (`vercel.json` hardened with security headers, SPA rewrites, long-cache for static assets + stockfish binaries, no-store for `/api/*`)
+- Phase 6 SRS practice drills — SM-2 scheduler auto-generates flashcards from every inaccuracy/mistake/blunder. Due cards surface as a "Warm up" prompt on the Play page. `/practice` runs a drill session: board shows the pre-mistake position, player must find the engine's best move, SM-2 schedules future reviews. Cards persist in IndexedDB and sync to the Supabase `practice_cards` table when logged in
 - Phase 9 Supabase auth + cross-device sync — magic-link sign-in at `/login`, one-shot anon → account migration at `/onboarding`, RLS-guarded `profiles` / `games` / `weakness_events` tables, dual-write on every local mutation, best-effort with graceful degradation when the deployment has no Supabase credentials
+- Phase 12 polish — PGN export (with RAV variations), ECO opening classification with book-move tagging, promotion picker UI, 5 additional motif detectors (pin, skewer, overloaded defender, king safety drop, bad endgame trade)
 
-Phase 6 (SRS practice drills) and Phases 10 – 12 (extended journey pages, legal/hardening, billing) are still on the roadmap. See the TODO checklists in [`DESIGN.md`](./DESIGN.md#15-build-phases--todo-checklists).
+Phases 10 – 11 (extended journey pages, legal/hardening) are still on the roadmap. See the TODO checklists in [`DESIGN.md`](./DESIGN.md#15-build-phases--todo-checklists).
 
 ## Requirements
 
@@ -145,6 +147,8 @@ Set these in the Vercel dashboard (production) or `.env.local` (local). `VITE_*`
 | Weakness profile | yes | yes |
 | Adaptive coaching | Template selection biased by profile | Profile injected into prompt |
 | SRS practice drills | yes | yes |
+| Opening classification (ECO) | yes | yes |
+| Promotion picker | yes | yes |
 | PGN export | yes | yes |
 | Runs offline (local dev) | yes | no (Claude API required) |
 | Cross-device sync (when logged in) | yes | yes |

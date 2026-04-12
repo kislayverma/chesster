@@ -18,7 +18,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-100">Dashboard</h1>
           <p className="text-sm text-slate-400">
-            Your learning profile, computed locally from every game you play.
+            See where you stand — your strengths, weaknesses, and progress at a glance.
           </p>
         </div>
         <button

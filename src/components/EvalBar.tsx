@@ -85,10 +85,10 @@ export default function EvalBar({ orientation = 'white' }: EvalBarProps) {
         <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-slate-500/60" />
       </div>
 
-      <div className="flex flex-col items-center text-xs">
-        <span className="font-mono tabular-nums text-slate-200">{label}</span>
+      <div className="flex w-6 flex-col items-center text-xs">
+        <span className="font-mono tabular-nums text-slate-200 text-[10px]">{label}</span>
         <span className="text-[10px] text-slate-500">
-          {thinking ? 'thinking…' : depth ? `d${depth}` : '—'}
+          {thinking ? '…' : depth ? `d${depth}` : '—'}
         </span>
       </div>
     </div>

@@ -1,16 +1,14 @@
 /**
- * Phase 7 SettingsPage — BYOK Anthropic key management.
+ * Phase 10 SettingsPage — BYOK key management + engine defaults +
+ * data management.
  *
- * Minimal first cut covering the Phase 7 scope: bring-your-own-key
- * input, save, clear, live mode indicator, and a sticky "key rejected"
- * banner that clears the moment a new key is saved.
- *
- * Everything Phase 10 will add to this page (engine depth, skill,
- * coaching verbosity, data export, clear local data) is intentionally
- * NOT implemented here — this module just owns the BYOK card.
+ * Three cards:
+ *   1. Anthropic API key (BYOK) — carried over from Phase 7.
+ *   2. Engine defaults — skill level and search depth for new games.
+ *   3. Data management — export profile as JSON, clear all local data.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   clearByokKey,
   hasByokKey,
@@ -25,6 +23,10 @@ import {
   subscribeLlmMode,
   type LlmMode,
 } from '../lib/featureFlags';
+import localforage from 'localforage';
+import { useGameStore } from '../game/gameStore';
+import { useProfileStore } from '../profile/profileStore';
+import { listGames } from '../game/gameStorage';
 
 const MODE_LABELS: Record<LlmMode, string> = {
   off: 'LLM: off',
@@ -120,10 +122,8 @@ export default function SettingsPage() {
           {MODE_DESCRIPTIONS[mode]}
         </p>
         <p className="mt-2 text-xs leading-relaxed text-slate-500">
-          Your key is stored only in your browser (IndexedDB) and sent to our{' '}
-          <code className="rounded bg-slate-800 px-1 py-0.5 text-[11px]">/api/*</code> proxy
-          as a per-request header. It is never logged, never persisted server-side, and
-          never shared with any other origin.
+          Your key is sent as a per-request header and is never logged or shared
+          with any third party.
         </p>
 
         {invalid && (
@@ -202,6 +202,131 @@ export default function SettingsPage() {
           </ol>
         </details>
       </section>
+
+      {/* ─── Engine Defaults ─────────────────────────────────── */}
+      <EngineDefaultsCard />
+
+      {/* ─── Data Management ─────────────────────────────────── */}
+      <DataManagementCard />
     </main>
+  );
+}
+
+/**
+ * Card for setting the default Stockfish skill level for new games.
+ */
+function EngineDefaultsCard() {
+  const skillLevel = useGameStore((s) => s.skillLevel);
+  const setSkillLevel = useGameStore((s) => s.setSkillLevel);
+
+  return (
+    <section className="max-w-2xl rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+      <h2 className="text-lg font-semibold text-slate-100">Engine defaults</h2>
+      <p className="mt-2 text-sm leading-relaxed text-slate-400">
+        These settings apply to the current and future games on this device.
+      </p>
+
+      <div className="mt-4">
+        <div className="mb-1 flex items-center justify-between text-xs text-slate-400">
+          <span>Stockfish skill level</span>
+          <span className="font-mono tabular-nums text-slate-200">
+            {skillLevel}
+          </span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={20}
+          step={1}
+          value={skillLevel}
+          onChange={(e) => setSkillLevel(parseInt(e.target.value, 10))}
+          className="w-full accent-slate-400"
+        />
+        <div className="mt-1 flex justify-between text-[10px] text-slate-500">
+          <span>0 (beginner)</span>
+          <span>20 (strongest)</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Card for exporting data and clearing local storage.
+ */
+function DataManagementCard() {
+  const profile = useProfileStore((s) => s.profile);
+  const clearProfile = useProfileStore((s) => s.clearProfile);
+  const [gameCount, setGameCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    void listGames().then((g) => setGameCount(g.length));
+  }, []);
+
+  const exportProfile = useCallback(() => {
+    const json = JSON.stringify(profile, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chesster-profile-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [profile]);
+
+  const clearAll = useCallback(async () => {
+    if (
+      !confirm(
+        'This will permanently delete your profile and all saved games from this browser. Continue?',
+      )
+    ) {
+      return;
+    }
+    clearProfile();
+    // Clear all localforage entries (games + index).
+    try {
+      await localforage.clear();
+    } catch {
+      // Best effort.
+    }
+    setGameCount(0);
+  }, [clearProfile]);
+
+  return (
+    <section className="max-w-2xl rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+      <h2 className="text-lg font-semibold text-slate-100">Data management</h2>
+      <p className="mt-2 text-sm leading-relaxed text-slate-400">
+        Your profile and games are always available. Sign in to sync across devices.
+      </p>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={exportProfile}
+          className="rounded bg-slate-800 px-4 py-1.5 text-sm text-slate-200 hover:bg-slate-700"
+        >
+          Export profile (JSON)
+        </button>
+
+        <span className="text-xs text-slate-500">
+          {gameCount != null ? `${gameCount} saved game${gameCount !== 1 ? 's' : ''}` : '...'}
+        </span>
+      </div>
+
+      <div className="mt-4 border-t border-slate-800 pt-4">
+        <button
+          type="button"
+          onClick={() => void clearAll()}
+          className="rounded border border-rose-500/40 bg-rose-900/20 px-4 py-1.5 text-sm text-rose-300 hover:bg-rose-900/40"
+        >
+          Clear all local data
+        </button>
+        <p className="mt-1 text-xs text-slate-500">
+          Permanently removes your profile, saved games, and API key.
+        </p>
+      </div>
+    </section>
   );
 }

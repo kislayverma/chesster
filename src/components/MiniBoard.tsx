@@ -12,11 +12,6 @@
  */
 
 import { Chessboard } from 'react-chessboard';
-import {
-  marbleCustomPieces,
-  marbleDarkSquareStyle,
-  marbleLightSquareStyle,
-} from './boardAssets';
 
 interface MiniBoardProps {
   fen: string;
@@ -34,9 +29,6 @@ export default function MiniBoard({ fen, orientation = 'white' }: MiniBoardProps
           borderRadius: '4px',
           boxShadow: '0 2px 6px rgba(0,0,0,0.35)',
         }}
-        customPieces={marbleCustomPieces}
-        customDarkSquareStyle={marbleDarkSquareStyle}
-        customLightSquareStyle={marbleLightSquareStyle}
         animationDuration={0}
       />
     </div>

@@ -6,12 +6,15 @@
  * Content is a direct carryover from Phase 4 `App.tsx`.
  */
 
+import { useCallback, useEffect } from 'react';
 import Board from '../components/Board';
 import CoachPanel from '../components/CoachPanel';
 import EvalBar from '../components/EvalBar';
 import MoveList from '../components/MoveList';
+import PracticePrompt from '../components/PracticePrompt';
 import StackPanel from '../components/StackPanel';
 import { useGameStore } from '../game/gameStore';
+import { exportPgn } from '../game/pgn';
 
 export default function PlayPage() {
   const turn = useGameStore((s) => s.turn);
@@ -20,8 +23,12 @@ export default function PlayPage() {
   const result = useGameStore((s) => s.result);
   const reset = useGameStore((s) => s.reset);
   const undo = useGameStore((s) => s.undo);
+  const goBack = useGameStore((s) => s.goBack);
+  const goForward = useGameStore((s) => s.goForward);
   const historyLength = useGameStore((s) => s.history.length);
+  const currentNodeId = useGameStore((s) => s.currentNodeId);
 
+  const tree = useGameStore((s) => s.tree);
   const engineEnabled = useGameStore((s) => s.engineEnabled);
   const humanColor = useGameStore((s) => s.humanColor);
   const skillLevel = useGameStore((s) => s.skillLevel);
@@ -38,12 +45,53 @@ export default function PlayPage() {
         thinking ? ' · Stockfish thinking…' : ''
       }`;
 
+  // Check if forward navigation is possible (current node has children).
+  const canGoForward = tree.nodes.get(currentNodeId)?.childrenIds.length ?? 0 > 0;
+
   const boardOrientation: 'white' | 'black' =
     humanColor === 'w' ? 'white' : 'black';
+
+  // Keyboard shortcuts: left/right arrow keys for navigation.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't capture when typing in an input/textarea.
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        goBack();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        goForward();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [goBack, goForward]);
+
+  const copyPgn = useCallback(async () => {
+    const pgn = exportPgn(tree, { humanColor });
+    try {
+      await navigator.clipboard.writeText(pgn);
+    } catch {
+      // Fallback for browsers that block clipboard API.
+      const ta = document.createElement('textarea');
+      ta.value = pgn;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+  }, [tree, humanColor]);
 
   return (
     <main className="grid flex-1 grid-cols-1 gap-6 p-6 lg:grid-cols-[auto_auto_320px]">
       <section className="flex flex-col items-center gap-4">
+        <PracticePrompt />
         <div className="flex items-start gap-4">
           <EvalBar orientation={boardOrientation} />
           <div className="w-[480px] max-w-[calc(100vw-8rem)]">
@@ -51,10 +99,31 @@ export default function PlayPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-3 text-sm">
-          <span className="rounded bg-slate-800 px-3 py-1 text-slate-300">
+        <div className="flex w-[480px] max-w-[calc(100vw-8rem)] flex-wrap items-center justify-center gap-3 text-sm">
+          <span className="truncate rounded bg-slate-800 px-3 py-1 text-center text-slate-300">
             {statusLine}
           </span>
+
+          {/* Navigation: back / forward */}
+          <button
+            type="button"
+            onClick={goBack}
+            disabled={historyLength === 0}
+            title="Previous move (Left arrow)"
+            className="rounded bg-slate-800 px-3 py-1 text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            &larr;
+          </button>
+          <button
+            type="button"
+            onClick={goForward}
+            disabled={!canGoForward}
+            title="Next move (Right arrow)"
+            className="rounded bg-slate-800 px-3 py-1 text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            &rarr;
+          </button>
+
           <button
             type="button"
             onClick={undo}
@@ -69,6 +138,13 @@ export default function PlayPage() {
             className="rounded bg-slate-800 px-3 py-1 text-slate-200 hover:bg-slate-700"
           >
             New game
+          </button>
+          <button
+            type="button"
+            onClick={copyPgn}
+            className="rounded bg-slate-800 px-3 py-1 text-slate-200 hover:bg-slate-700"
+          >
+            Copy PGN
           </button>
         </div>
       </section>
