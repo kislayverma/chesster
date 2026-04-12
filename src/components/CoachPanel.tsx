@@ -87,7 +87,7 @@ export default function CoachPanel() {
           className="mt-3 w-full rounded bg-amber-700/60 px-3 py-1.5 text-xs font-medium text-amber-50 hover:bg-amber-700"
           title="Fork at the previous position and play the engine's top move instead"
         >
-          Try this line
+          Try this move
         </button>
       )}
     </div>

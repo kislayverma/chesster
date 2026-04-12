@@ -79,7 +79,7 @@ export default function NavShell() {
               className="hidden rounded bg-slate-800 px-2 py-1 text-xs text-slate-300 lg:inline-block"
               title="Exploration frames on top of the mainline. Anonymous users are capped; sign in for unlimited."
             >
-              Stack: {depth}/{MAX_ANON_BRANCHES}
+              Branches: {depth}/{MAX_ANON_BRANCHES}
             </span>
             <NavLink
               to="/settings"
@@ -137,7 +137,7 @@ export default function NavShell() {
             {/* Mobile-only badges */}
             <div className="mt-2 flex items-center gap-2 border-t border-slate-800 px-3 pt-3">
               <span className="rounded bg-slate-800 px-2 py-1 text-xs text-slate-300">
-                Stack: {depth}/{MAX_ANON_BRANCHES}
+                Branches: {depth}/{MAX_ANON_BRANCHES}
               </span>
               <NavLink
                 to="/settings"
