@@ -780,6 +780,8 @@ export const useGameStore = create<GameStore>((set, get) => {
     makeMove: (from, to, promotion) => {
       const state = get();
       if (state.isGameOver) return false;
+      // No moves allowed once the game has a result (checkmate, resign, draw).
+      if (state.tree.result !== null) return false;
       if (state.engineEnabled && state.turn !== state.humanColor) return false;
 
       const { tree, currentNodeId, currentFrameId } = state;

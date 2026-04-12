@@ -43,6 +43,7 @@ interface ProfileRow {
   phase_cp_loss: unknown;
   opening_weaknesses: unknown;
   acpl_history: unknown;
+  journey_state: unknown;
   created_at?: string;
   updated_at: string;
 }
@@ -73,6 +74,7 @@ function profileToRow(p: PlayerProfile, userId: string): ProfileRow {
     phase_cp_loss: p.phaseCpLoss,
     opening_weaknesses: p.openingWeaknesses,
     acpl_history: p.acplHistory,
+    journey_state: p.journeyState,
     created_at: new Date(p.createdAt).toISOString(),
     updated_at: new Date(p.updatedAt).toISOString(),
   };
@@ -207,18 +209,20 @@ export async function loadProfileRemote(
     acplHistory: Array.isArray(row?.acpl_history)
       ? (row!.acpl_history as PlayerProfile['acplHistory'])
       : [],
-    journeyState: (row as unknown as Record<string, unknown>)?.journey_state as PlayerProfile['journeyState'] ?? {
-      calibrationGamesPlayed: 0,
-      calibrated: false,
-      currentLevel: 'newcomer',
-      levelProgress: 0,
-      rollingRating: 0,
-      gamesAtCurrentLevel: 0,
-      reviewCreditsToday: 0,
-      reviewCreditDate: new Date().toISOString().slice(0, 10),
-      promotionHistory: [],
-      lastPromotionDismissed: true,
-    },
+    journeyState: row?.journey_state
+      ? (row.journey_state as PlayerProfile['journeyState'])
+      : {
+          calibrationGamesPlayed: 0,
+          calibrated: false,
+          currentLevel: 'newcomer',
+          levelProgress: 0,
+          rollingRating: 0,
+          gamesAtCurrentLevel: 0,
+          reviewCreditsToday: 0,
+          reviewCreditDate: new Date().toISOString().slice(0, 10),
+          promotionHistory: [],
+          lastPromotionDismissed: true,
+        },
     createdAt: row?.created_at ? Date.parse(row.created_at) : Date.now(),
     updatedAt: row?.updated_at ? Date.parse(row.updated_at) : Date.now(),
   };

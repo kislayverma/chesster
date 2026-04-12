@@ -118,6 +118,19 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
   },
 
   replaceProfile: (next) => {
+    // If the local journey state is more advanced (more calibration
+    // games or more games at current level), keep it. This prevents a
+    // stale remote pull from wiping local progress during the debounce
+    // window after a game finishes.
+    const local = get().profile.journeyState;
+    if (local && next.journeyState) {
+      const localMoreAdvanced =
+        local.calibrationGamesPlayed > next.journeyState.calibrationGamesPlayed ||
+        (local.calibrated && !next.journeyState.calibrated);
+      if (localMoreAdvanced) {
+        next = { ...next, journeyState: local };
+      }
+    }
     set({ profile: next, hydrated: true });
     // Write straight through to IndexedDB — we JUST pulled this from
     // Supabase, so bouncing it back through `scheduleSave` would
