@@ -7,10 +7,10 @@
  * bundle stays tight.
  *
  * Sections:
- *   • Overview    — totalGames, totalMoves, most recent ACPL
+ *   • Overview    — totalGames, totalMoves, estimated rating + standing
  *   • Top motifs  — horizontal bar graph driven by `getTopWeaknesses`
- *   • Phase CP loss — three bars (opening / middlegame / endgame)
- *   • ACPL trend  — sparkline over `acplHistory`
+ *   • Phase ratings — three bars (opening / middlegame / endgame)
+ *   • Rating trend — sparkline over `acplHistory` converted to Elo
  *   • Retired     — motifs whose decayed count dropped below threshold
  */
 
@@ -21,6 +21,7 @@ import {
 } from '../profile/weaknessSelector';
 import { MOTIF_LABELS, type MotifId } from '../tagging/motifs';
 import type { PlayerProfile } from '../profile/types';
+import { acplToRating, ratingStanding } from '../lib/rating';
 
 interface Props {
   /** Override — pass a profile explicitly (e.g. for a tutorial preview). */
@@ -49,17 +50,19 @@ export default function WeaknessDashboard({
     { key: 'middlegame', label: 'Middlegame' },
     { key: 'endgame', label: 'Endgame' },
   ];
-  const phaseMax = Math.max(
-    1,
-    profile.phaseCpLoss.opening,
-    profile.phaseCpLoss.middlegame,
-    profile.phaseCpLoss.endgame
-  );
+  const phaseRatings = {
+    opening: acplToRating(profile.phaseCpLoss.opening),
+    middlegame: acplToRating(profile.phaseCpLoss.middlegame),
+    endgame: acplToRating(profile.phaseCpLoss.endgame),
+  };
+  const phaseRatingMax = 2800;
 
   const latestAcpl =
     profile.acplHistory.length > 0
       ? profile.acplHistory[profile.acplHistory.length - 1].acpl
       : null;
+  const latestRating = latestAcpl != null ? acplToRating(latestAcpl) : null;
+  const latestStanding = latestRating != null ? ratingStanding(latestRating) : null;
 
   return (
     <div className="flex flex-col gap-5 rounded-lg border border-slate-800 bg-slate-900/60 p-4 text-slate-200">
@@ -68,8 +71,9 @@ export default function WeaknessDashboard({
         <Stat label="Games" value={profile.totalGames.toString()} />
         <Stat label="Moves" value={profile.totalMoves.toString()} />
         <Stat
-          label="Last ACPL"
-          value={latestAcpl != null ? latestAcpl.toFixed(0) : '—'}
+          label="Rating"
+          value={latestRating != null ? String(latestRating) : '—'}
+          subtitle={latestStanding ?? undefined}
         />
       </div>
 
@@ -91,7 +95,7 @@ export default function WeaknessDashboard({
                   <div className="mb-1 flex justify-between text-slate-300">
                     <span>{labelFor(w.motif)}</span>
                     <span className="font-mono tabular-nums text-slate-500">
-                      {w.count} · avg {Math.round(w.avgCpLoss)}cp
+                      {w.count} occurrence{w.count !== 1 ? 's' : ''}
                     </span>
                   </div>
                   <div className="h-1.5 overflow-hidden rounded bg-slate-800">
@@ -110,24 +114,30 @@ export default function WeaknessDashboard({
       {/* Phase breakdown */}
       <section>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Average cp loss by phase
+          Estimated rating by phase
         </h3>
         <ul className="flex flex-col gap-2">
           {phaseEntries.map(({ key, label }) => {
-            const value = profile.phaseCpLoss[key];
-            const pct = Math.round((value / phaseMax) * 100);
+            const rating = phaseRatings[key];
+            const pct = Math.min(100, Math.round((rating / phaseRatingMax) * 100));
+            const color =
+              rating >= 1800
+                ? 'bg-emerald-500/80'
+                : rating >= 1200
+                  ? 'bg-amber-500/80'
+                  : 'bg-rose-500/80';
             return (
               <li key={key} className="text-xs">
                 <div className="mb-1 flex justify-between text-slate-300">
                   <span>{label}</span>
                   <span className="font-mono tabular-nums text-slate-500">
-                    {value > 0 ? value.toFixed(0) : '—'}
+                    ~{rating} · {ratingStanding(rating)}
                   </span>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded bg-slate-800">
                   <div
-                    className="h-full bg-sky-500/80"
-                    style={{ width: `${value > 0 ? pct : 0}%` }}
+                    className={`h-full ${color}`}
+                    style={{ width: `${pct}%` }}
                   />
                 </div>
               </li>
@@ -136,13 +146,13 @@ export default function WeaknessDashboard({
         </ul>
       </section>
 
-      {/* ACPL sparkline */}
+      {/* Rating sparkline */}
       {profile.acplHistory.length > 1 && (
         <section>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            ACPL over time
+            Rating over time
           </h3>
-          <Sparkline values={profile.acplHistory.map((a) => a.acpl)} />
+          <Sparkline values={profile.acplHistory.map((a) => acplToRating(a.acpl))} />
         </section>
       )}
 
@@ -169,13 +179,16 @@ export default function WeaknessDashboard({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, subtitle }: { label: string; value: string; subtitle?: string }) {
   return (
     <div className="rounded bg-slate-800/60 px-2 py-2">
       <div className="font-mono text-lg tabular-nums text-slate-100">{value}</div>
       <div className="text-[10px] uppercase tracking-wider text-slate-500">
         {label}
       </div>
+      {subtitle && (
+        <div className="mt-0.5 text-[9px] text-slate-500">{subtitle}</div>
+      )}
     </div>
   );
 }

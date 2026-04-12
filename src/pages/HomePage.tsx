@@ -7,6 +7,7 @@
 
 import { NavLink } from 'react-router-dom';
 import { useProfileStore } from '../profile/profileStore';
+import { acplToRating, ratingStanding } from '../lib/rating';
 
 export default function HomePage() {
   const totalGames = useProfileStore((s) => s.profile.totalGames);
@@ -15,8 +16,10 @@ export default function HomePage() {
 
   const latestAcpl =
     acplHistory.length > 0
-      ? acplHistory[acplHistory.length - 1].acpl.toFixed(1)
+      ? acplHistory[acplHistory.length - 1].acpl
       : null;
+  const latestRating = latestAcpl != null ? acplToRating(latestAcpl) : null;
+  const latestStanding = latestRating != null ? ratingStanding(latestRating) : null;
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-10 p-6">
@@ -43,9 +46,9 @@ export default function HomePage() {
           <StatCard label="Games played" value={String(totalGames)} />
           <StatCard label="Moves analyzed" value={String(totalMoves)} />
           <StatCard
-            label="Latest ACPL"
-            value={latestAcpl ?? '—'}
-            subtitle={latestAcpl ? 'avg centipawn loss' : 'play a game first'}
+            label="Estimated Rating"
+            value={latestRating != null ? String(latestRating) : '—'}
+            subtitle={latestStanding ?? 'play a game first'}
           />
         </section>
       )}
@@ -66,7 +69,7 @@ export default function HomePage() {
         />
         <FeatureCard
           title="Your Profile"
-          description="Track your ACPL trend, top weaknesses, and opening stats."
+          description="Track your rating, top weaknesses, and see how you stack up."
           linkTo="/profile"
           linkLabel="View profile"
         />

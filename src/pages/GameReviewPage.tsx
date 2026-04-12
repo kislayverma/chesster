@@ -372,9 +372,6 @@ export default function GameReviewPage() {
                         <span className="text-slate-400">
                           Move {evt.moveNumber} · {evt.color}
                         </span>
-                        <span className="ml-auto text-slate-500">
-                          -{Math.round(evt.cpLoss)}cp
-                        </span>
                       </div>
                       <div className="mt-1 flex items-center gap-2 font-mono text-[11px]">
                         <span className="text-slate-300">

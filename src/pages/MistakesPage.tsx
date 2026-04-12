@@ -190,9 +190,6 @@ export default function MistakesPage() {
                             </span>
                           </span>
                         )}
-                        <span className="text-slate-500">
-                          · {Math.round(e.cpLoss)}cp lost
-                        </span>
                       </div>
                       {e.motifs.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1">
