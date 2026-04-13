@@ -92,7 +92,7 @@ export default function LoginPage() {
   const onVerifyCode = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const trimmed = code.trim();
-    if (trimmed.length < 6) return;
+    if (trimmed.length < 6) return; // Supabase sends 6- or 8-digit codes
     setVerifying(true);
     try {
       await verifyOtp(email.trim(), trimmed);
@@ -182,7 +182,7 @@ export default function LoginPage() {
         {codeSent && status !== 'authenticated' && (
           <form onSubmit={onVerifyCode} className="mt-5 flex flex-col gap-3">
             <p className="text-sm text-slate-300">
-              We sent a 6-digit code to{' '}
+              We sent a code to{' '}
               <span className="font-mono text-slate-100">{email}</span>.
             </p>
             <label className="block">
@@ -195,16 +195,16 @@ export default function LoginPage() {
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="123456"
-                maxLength={6}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                placeholder="12345678"
+                maxLength={8}
                 required
                 className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-center font-mono text-lg tracking-[0.3em] text-slate-100 focus:border-amber-500 focus:outline-none"
               />
             </label>
             <button
               type="submit"
-              disabled={verifying || code.trim().length < 6}
+              disabled={verifying || code.trim().length < 6} // accept 6–8 digits
               className="rounded bg-amber-600 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {verifying ? 'Verifying…' : 'Verify'}
