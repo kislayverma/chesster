@@ -2,8 +2,8 @@
  * Phase 9 auth store.
  *
  * Holds the current Supabase session/user and exposes the imperative
- * actions the pages need: `signInWithEmail`, `signOut`, and
- * `initialize` (called once on app boot from `main.tsx`).
+ * actions the pages need: `signInWithEmail`, `verifyOtp`, `signOut`,
+ * and `initialize` (called once on app boot from `main.tsx`).
  *
  * Architecture:
  *
@@ -54,7 +54,10 @@ interface AuthStore {
   lastError: string | null;
 
   initialize: () => Promise<void>;
-  signInWithEmail: (email: string, redirectTo?: string) => Promise<boolean>;
+  /** Send a 6-digit OTP code to the given email. */
+  signInWithEmail: (email: string) => Promise<boolean>;
+  /** Verify the OTP code the user received. Returns true on success. */
+  verifyOtp: (email: string, token: string) => Promise<boolean>;
   signOut: () => Promise<void>;
 
   /** Internal — called by the auth-state-change subscription. */
@@ -120,7 +123,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
-  signInWithEmail: async (email, redirectTo) => {
+  signInWithEmail: async (email) => {
     const supabase = getSupabase();
     if (!supabase) {
       set({ lastError: 'Sync is not configured on this deployment.' });
@@ -128,14 +131,39 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
     set({ lastError: null });
     try {
-      const { error } = await supabase.auth.signInWithOtp({
+      // No emailRedirectTo — Supabase sends a 6-digit code instead of
+      // a magic link, so the user stays in this browser tab.
+      const { error } = await supabase.auth.signInWithOtp({ email });
+      if (error) {
+        set({ lastError: error.message });
+        return false;
+      }
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      set({ lastError: msg });
+      return false;
+    }
+  },
+
+  verifyOtp: async (email, token) => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      set({ lastError: 'Sync is not configured on this deployment.' });
+      return false;
+    }
+    set({ lastError: null });
+    try {
+      const { error } = await supabase.auth.verifyOtp({
         email,
-        options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+        token,
+        type: 'email',
       });
       if (error) {
         set({ lastError: error.message });
         return false;
       }
+      // Session is established — onAuthStateChange fires automatically.
       return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';

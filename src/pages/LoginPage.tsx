@@ -1,28 +1,27 @@
 /**
- * Phase 9 LoginPage — Supabase magic-link sign-in.
+ * Phase 9 LoginPage — Supabase OTP code sign-in.
  *
- * Minimal flow:
+ * Flow:
  *
- *   1. User types their email and hits "Send link".
- *   2. `authStore.signInWithEmail(email, redirect)` kicks off a
- *      Supabase `signInWithOtp` request.
- *   3. On success we flip the form into a "check your inbox" state.
- *      The user clicks the emailed link and Supabase drops them back
- *      on `/login?...` with a session hash in the URL — the
- *      `detectSessionInUrl` option in `supabaseClient.ts` picks it up
- *      and the `authStore` transitions to `authenticated` via the
- *      existing `onAuthStateChange` listener.
- *   4. When the store reports `authenticated`, an effect redirects
- *      to the post-login landing page (onboarding if this device
- *      hasn't been claimed yet, otherwise the `next` query param
- *      or the root).
+ *   1. User types their email and hits "Send code".
+ *   2. `authStore.signInWithEmail(email)` sends a 6-digit OTP code
+ *      via Supabase (no magic link, no redirect).
+ *   3. The page flips to a code-entry form. The user checks their
+ *      email, types the code, and hits "Verify".
+ *   4. `authStore.verifyOtp(email, code)` establishes the session
+ *      in this browser tab. `onAuthStateChange` fires, the store
+ *      transitions to `authenticated`, and an effect redirects to
+ *      the post-login landing page.
+ *
+ * This avoids the in-app browser problem where Gmail/Outlook open
+ * magic links in a WebView that doesn't share session storage with
+ * the user's real browser.
  *
  * If the deployment wasn't built with Supabase credentials, the page
- * shows an explanatory card instead of a broken form — this is the
- * expected state on the Phase 8 BYOK-only production deploy.
+ * shows an explanatory card instead of a broken form.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../auth/authStore';
 import { isAlreadyMigrated } from '../sync/migrateAnonymous';
@@ -31,23 +30,23 @@ export default function LoginPage() {
   const status = useAuthStore((s) => s.status);
   const lastError = useAuthStore((s) => s.lastError);
   const signInWithEmail = useAuthStore((s) => s.signInWithEmail);
+  const verifyOtp = useAuthStore((s) => s.verifyOtp);
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
   const location = useLocation();
 
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
+  const [code, setCode] = useState('');
+  const [verifying, setVerifying] = useState(false);
+
+  const codeInputRef = useRef<HTMLInputElement>(null);
 
   const nextParam = useMemo(() => {
     const q = new URLSearchParams(location.search);
     return q.get('next') || '/';
   }, [location.search]);
-
-  const redirectTo = useMemo(() => {
-    if (typeof window === 'undefined') return undefined;
-    return `${window.location.origin}/login?next=${encodeURIComponent(nextParam)}`;
-  }, [nextParam]);
 
   // Post-authentication landing: onboarding (for unclaimed devices)
   // or the requested `next` page.
@@ -70,14 +69,45 @@ export default function LoginPage() {
     };
   }, [status, user, nextParam, navigate]);
 
-  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  // Auto-focus the code input when it appears.
+  useEffect(() => {
+    if (codeSent && codeInputRef.current) {
+      codeInputRef.current.focus();
+    }
+  }, [codeSent]);
+
+  const onSendCode = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const trimmed = email.trim();
     if (!trimmed || !/.+@.+\..+/.test(trimmed)) return;
     setSending(true);
     try {
-      const ok = await signInWithEmail(trimmed, redirectTo);
-      setSent(ok);
+      const ok = await signInWithEmail(trimmed);
+      if (ok) setCodeSent(true);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const onVerifyCode = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const trimmed = code.trim();
+    if (trimmed.length < 6) return;
+    setVerifying(true);
+    try {
+      await verifyOtp(email.trim(), trimmed);
+      // On success, onAuthStateChange fires and the effect above
+      // handles the redirect. On failure, lastError is set.
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const onResend = async () => {
+    setSending(true);
+    setCode('');
+    try {
+      await signInWithEmail(email.trim());
     } finally {
       setSending(false);
     }
@@ -110,7 +140,7 @@ export default function LoginPage() {
       <section className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900/40 p-4 md:p-6">
         <h1 className="text-xl font-bold text-slate-100">Sign in</h1>
         <p className="mt-2 text-sm leading-relaxed text-slate-400">
-          We'll email you a one-time magic link. No password, no tracking — just a
+          We'll email you a one-time code. No password, no tracking — just a
           way to sync your games and weakness profile across devices.
         </p>
 
@@ -118,8 +148,9 @@ export default function LoginPage() {
           <p className="mt-4 text-xs text-slate-500">Checking session…</p>
         )}
 
-        {!sent && status !== 'authenticated' && (
-          <form onSubmit={onSubmit} className="mt-5 flex flex-col gap-3">
+        {/* Step 1: Email input */}
+        {!codeSent && status !== 'authenticated' && (
+          <form onSubmit={onSendCode} className="mt-5 flex flex-col gap-3">
             <label className="block">
               <span className="text-xs font-medium uppercase tracking-wider text-slate-400">
                 Email
@@ -139,7 +170,7 @@ export default function LoginPage() {
               disabled={sending || email.trim().length === 0}
               className="rounded bg-amber-600 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {sending ? 'Sending…' : 'Send magic link'}
+              {sending ? 'Sending…' : 'Send code'}
             </button>
             {lastError && (
               <p className="text-xs text-rose-300">{lastError}</p>
@@ -147,12 +178,61 @@ export default function LoginPage() {
           </form>
         )}
 
-        {sent && (
-          <div className="mt-5 rounded border border-emerald-500/50 bg-emerald-900/30 p-4 text-sm text-emerald-100">
-            Check your inbox at{' '}
-            <span className="font-mono">{email}</span>. Click the link to finish
-            signing in — you can close this tab.
-          </div>
+        {/* Step 2: OTP code input */}
+        {codeSent && status !== 'authenticated' && (
+          <form onSubmit={onVerifyCode} className="mt-5 flex flex-col gap-3">
+            <p className="text-sm text-slate-300">
+              We sent a 6-digit code to{' '}
+              <span className="font-mono text-slate-100">{email}</span>.
+            </p>
+            <label className="block">
+              <span className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                Code
+              </span>
+              <input
+                ref={codeInputRef}
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="123456"
+                maxLength={6}
+                required
+                className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-center font-mono text-lg tracking-[0.3em] text-slate-100 focus:border-amber-500 focus:outline-none"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={verifying || code.trim().length < 6}
+              className="rounded bg-amber-600 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {verifying ? 'Verifying…' : 'Verify'}
+            </button>
+            {lastError && (
+              <p className="text-xs text-rose-300">{lastError}</p>
+            )}
+            <div className="flex items-center justify-between text-xs text-slate-500">
+              <button
+                type="button"
+                onClick={onResend}
+                disabled={sending}
+                className="text-slate-400 underline underline-offset-2 hover:text-slate-200 disabled:opacity-40"
+              >
+                {sending ? 'Resending…' : 'Resend code'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCodeSent(false);
+                  setCode('');
+                }}
+                className="text-slate-400 underline underline-offset-2 hover:text-slate-200"
+              >
+                Change email
+              </button>
+            </div>
+          </form>
         )}
 
         {status === 'authenticated' && (
