@@ -7,6 +7,7 @@
  */
 
 import { useEffect } from 'react';
+import { NavLink } from 'react-router-dom';
 import Board from '../components/Board';
 import CoachPanel from '../components/CoachPanel';
 import MoveList from '../components/MoveList';
@@ -29,6 +30,7 @@ export default function PlayPage() {
   const tree = useGameStore((s) => s.tree);
   const humanColor = useGameStore((s) => s.humanColor);
   const skillLevel = useGameStore((s) => s.skillLevel);
+  const branchCapReached = useGameStore((s) => s.branchCapReached);
 
   const setHumanColor = useGameStore((s) => s.setHumanColor);
   const setSkillLevel = useGameStore((s) => s.setSkillLevel);
@@ -72,6 +74,20 @@ export default function PlayPage() {
       {/* Column 1: Board + controls */}
       <section className="flex flex-col items-center gap-3 lg:gap-4">
         <PracticePrompt />
+
+        {branchCapReached && (
+          <div
+            role="alert"
+            className="w-full max-w-[480px] rounded border border-amber-500/60 bg-amber-900/30 px-3 py-2 text-xs text-amber-100"
+          >
+            Branch limit reached.{' '}
+            <NavLink to="/login" className="underline underline-offset-2 hover:text-amber-50">
+              Sign in
+            </NavLink>{' '}
+            for unlimited branches.
+          </div>
+        )}
+
         <div className="w-full max-w-[480px]">
           <Board orientation={boardOrientation} />
         </div>

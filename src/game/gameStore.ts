@@ -222,6 +222,12 @@ interface GameStore
     EngineSettings,
     CoachState,
     TreeState {
+  /**
+   * True when the user attempted to branch but was blocked by the
+   * anonymous branch cap. Auto-clears after a few seconds.
+   */
+  branchCapReached: boolean;
+
   /** Attempt a move from the current position. Returns true if applied. */
   makeMove: (from: string, to: string, promotion?: string) => boolean;
 
@@ -405,6 +411,17 @@ export const useGameStore = create<GameStore>((set, get) => {
    * etc.) and we drop it silently.
    */
   let analysisSeq = 0;
+
+  /** Flash `branchCapReached` for 4 seconds then auto-clear. */
+  let branchCapTimer: ReturnType<typeof setTimeout> | null = null;
+  function signalBranchCap() {
+    set({ branchCapReached: true });
+    if (branchCapTimer) clearTimeout(branchCapTimer);
+    branchCapTimer = setTimeout(() => {
+      branchCapTimer = null;
+      set({ branchCapReached: false });
+    }, 4000);
+  }
 
   /**
    * Like `kickAnalysis` but never auto-plays and never coaches. Used
@@ -704,10 +721,7 @@ export const useGameStore = create<GameStore>((set, get) => {
             // followed by auto-play). Push a new frame, subject to
             // the stack cap.
             if (stackDepth(t3) >= getBranchCap()) {
-              console.warn(
-                '[engine] stack cap reached, dropping engine move',
-                engineUci
-              );
+              signalBranchCap();
               return;
             }
             pushFrame(t3, curId, targetId);
@@ -777,6 +791,9 @@ export const useGameStore = create<GameStore>((set, get) => {
     // Coach state defaults
     ...EMPTY_COACH_STATE,
 
+    // Branch cap error
+    branchCapReached: false,
+
     makeMove: (from, to, promotion) => {
       const state = get();
       if (state.isGameOver) return false;
@@ -819,7 +836,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       const willPushFrame = !isFrameTip(curFrame, currentNodeId);
 
       if (willPushFrame && stackDepth(tree) >= getBranchCap()) {
-        // Silently refuse — the stack panel already shows the cap.
+        signalBranchCap();
         return false;
       }
 
@@ -943,6 +960,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       // made the move at the tip of the current frame, we're forking
       // off the *parent* position (the one BEFORE the user's move).
       if (stackDepth(tree) >= getBranchCap()) {
+        signalBranchCap();
         return;
       }
 

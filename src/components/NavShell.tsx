@@ -10,9 +10,6 @@
 
 import { NavLink, Outlet } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { useGameStore } from '../game/gameStore';
-import { stackDepth } from '../game/gameTree';
-import { getBranchCap } from '../lib/branchLimit';
 import { getLlmMode, subscribeLlmMode, type LlmMode } from '../lib/featureFlags';
 import { useAuthStore } from '../auth/authStore';
 
@@ -39,11 +36,8 @@ const LLM_BADGE_CLASSES: Record<LlmMode, string> = {
 };
 
 export default function NavShell() {
-  const depth = useGameStore((s) => stackDepth(s.tree));
   const [llmMode, setLlmMode] = useState<LlmMode>(getLlmMode());
   const [menuOpen, setMenuOpen] = useState(false);
-  const cap = getBranchCap();
-  const branchLabel = Number.isFinite(cap) ? `${depth}/${cap}` : `${depth}`;
 
   useEffect(() => subscribeLlmMode(setLlmMode), []);
 
@@ -76,13 +70,6 @@ export default function NavShell() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Badges — hidden on mobile, shown on desktop */}
-            <span
-              className="hidden rounded bg-slate-800 px-2 py-1 text-xs text-slate-300 lg:inline-block"
-              title="Exploration frames on top of the mainline. Anonymous users are capped; sign in for unlimited."
-            >
-              Branches: {branchLabel}
-            </span>
             <NavLink
               to="/settings"
               title="Click to manage your Anthropic API key"
@@ -138,9 +125,6 @@ export default function NavShell() {
             ))}
             {/* Mobile-only badges */}
             <div className="mt-2 flex items-center gap-2 border-t border-slate-800 px-3 pt-3">
-              <span className="rounded bg-slate-800 px-2 py-1 text-xs text-slate-300">
-                Branches: {branchLabel}
-              </span>
               <NavLink
                 to="/settings"
                 onClick={() => setMenuOpen(false)}

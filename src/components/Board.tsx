@@ -46,6 +46,8 @@ export default function Board({ orientation = 'white' }: BoardProps) {
   const isGameOver = useGameStore((s) => s.isGameOver);
   const result = useGameStore((s) => s.result);
   const reset = useGameStore((s) => s.reset);
+  const goToNode = useGameStore((s) => s.goToNode);
+  const rootId = useGameStore((s) => s.tree.rootId);
   const inCheck = useGameStore((s) => s.inCheck);
   const lastMoveQuality = useGameStore((s) => s.lastMoveQuality);
   const lastMoveBestMoveBefore = useGameStore((s) => s.lastMoveBestMoveBefore);
@@ -311,7 +313,19 @@ export default function Board({ orientation = 'white' }: BoardProps) {
       {/* Game-over modal overlay */}
       {showGameOverModal && (
         <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-black/60 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-4 rounded-xl bg-slate-900 px-8 py-6 shadow-2xl border border-slate-700">
+          <div className="relative flex flex-col items-center gap-4 rounded-xl bg-slate-900 px-8 py-6 shadow-2xl border border-slate-700">
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={() => setGameOverDismissed(true)}
+              className="absolute right-2 top-2 rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-200"
+              aria-label="Close"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
             <h2 className="text-2xl font-bold text-slate-100">
               {gameOverHeadline}
             </h2>
@@ -331,7 +345,7 @@ export default function Board({ orientation = 'white' }: BoardProps) {
               </button>
               <button
                 type="button"
-                onClick={() => setGameOverDismissed(true)}
+                onClick={() => { goToNode(rootId); setGameOverDismissed(true); }}
                 className="rounded-lg bg-slate-700 px-5 py-2 text-sm font-medium text-slate-200 hover:bg-slate-600"
               >
                 Review game
