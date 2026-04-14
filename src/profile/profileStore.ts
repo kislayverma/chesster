@@ -26,6 +26,8 @@ import type { PlayerProfile, WeaknessEvent } from './types';
 import type { ProfileSummary } from '../coach/types';
 import { pushProfileRemote } from '../sync/syncOrchestrator';
 import { processMistakeReview } from '../lib/journey';
+import { skillLevelForLevel } from '../lib/rating';
+import { useGameStore } from '../game/gameStore';
 
 const STORAGE_KEY = 'chesster:profile:v1';
 const SAVE_DEBOUNCE_MS = 500;
@@ -105,6 +107,12 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
         // Recompute decayed counts so they reflect "now", not last save.
         const refreshed = recomputeAggregates(stored);
         set({ profile: refreshed, hydrated: true });
+        // Sync Stockfish difficulty to the stored journey level.
+        if (refreshed.journeyState) {
+          useGameStore.getState().setSkillLevel(
+            skillLevelForLevel(refreshed.journeyState.currentLevel),
+          );
+        }
       } else {
         set({ hydrated: true });
       }
@@ -160,8 +168,19 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
   },
 
   finishGame: (acpl) => {
-    const next = recordGameFinished(get().profile, acpl);
+    const prev = get().profile;
+    const next = recordGameFinished(prev, acpl);
     set({ profile: next });
+
+    // If the player was promoted, adjust Stockfish to the new level.
+    const prevLevel = prev.journeyState?.currentLevel;
+    const nextLevel = next.journeyState?.currentLevel;
+    if (nextLevel && nextLevel !== prevLevel) {
+      useGameStore.getState().setSkillLevel(
+        skillLevelForLevel(nextLevel),
+      );
+    }
+
     // Flush immediately (no debounce) so the journey state reaches
     // IndexedDB + Supabase before any remote hydration can race.
     if (saveTimer) {

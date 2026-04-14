@@ -56,6 +56,7 @@ import { useGameStore } from '../game/gameStore';
 import { clearByokKey, setByokKey } from '../lib/byokStorage';
 import { markServerModeByokOnly } from '../lib/featureFlags';
 import { loadByokKeyRemote, saveByokKeyRemote, deleteByokKeyRemote } from './remoteByokStore';
+import { skillLevelForLevel } from '../lib/rating';
 import { clearAnonId } from '../lib/anonId';
 import type { PersistedGame, PlayerProfile } from '../profile/types';
 import type { PracticeCard } from '../srs/types';
@@ -136,6 +137,12 @@ export async function hydrateFromRemote(userId: string): Promise<void> {
     const remoteProfile = await loadProfileRemote(userId);
     if (remoteProfile) {
       useProfileStore.getState().replaceProfile(remoteProfile);
+      // Sync Stockfish difficulty to the user's journey level.
+      if (remoteProfile.journeyState?.currentLevel) {
+        useGameStore.getState().setSkillLevel(
+          skillLevelForLevel(remoteProfile.journeyState.currentLevel),
+        );
+      }
     }
 
     // Games are bulk-downloaded and written straight to IndexedDB.

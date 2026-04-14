@@ -105,6 +105,15 @@ export function nextLevel(key: string): LevelDef | null {
   return ALL_LEVELS[idx + 1];
 }
 
+/**
+ * Return the Stockfish skill level appropriate for a journey level.
+ * Uses the midpoint of the level's `skillRange`.
+ */
+export function skillLevelForLevel(levelKey: string): number {
+  const def = getLevelDef(levelKey);
+  return Math.round((def.skillRange[0] + def.skillRange[1]) / 2);
+}
+
 /** Determine which level a given Elo rating falls into. */
 export function levelForRating(elo: number): LevelDef {
   for (let i = ALL_LEVELS.length - 1; i >= 0; i--) {
