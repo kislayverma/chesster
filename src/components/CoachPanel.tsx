@@ -26,11 +26,14 @@ export default function CoachPanel() {
   const bestMoveBefore = useGameStore((s) => s.lastMoveBestMoveBefore);
   const thinking = useGameStore((s) => s.thinking);
   const isGameOver = useGameStore((s) => s.isGameOver);
+  const treeResult = useGameStore((s) => s.tree.result);
   const historyLength = useGameStore((s) => s.history.length);
   const tryThisLine = useGameStore((s) => s.tryThisLine);
 
+  const gameFinished = !!treeResult || isGameOver;
+
   const showTryThis =
-    !isGameOver &&
+    !gameFinished &&
     !!bestMoveBefore &&
     (quality === 'inaccuracy' || quality === 'mistake' || quality === 'blunder');
 

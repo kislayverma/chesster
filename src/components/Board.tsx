@@ -47,6 +47,7 @@ export default function Board({ orientation = 'white' }: BoardProps) {
   const makeMove = useGameStore((s) => s.makeMove);
   const isGameOver = useGameStore((s) => s.isGameOver);
   const result = useGameStore((s) => s.result);
+  const treeResult = useGameStore((s) => s.tree.result);
   const reset = useGameStore((s) => s.reset);
   const treeId = useGameStore((s) => s.tree.id);
   const inCheck = useGameStore((s) => s.inCheck);
@@ -56,15 +57,18 @@ export default function Board({ orientation = 'white' }: BoardProps) {
   const lastMoveTo = useGameStore((s) => s.lastMoveTo);
 
   // ─── Game-over modal state ──────────────────────────────────────
+  // The game is finished when tree.result is set (covers mainline AND
+  // branch endings) or when the current position itself is game-over.
+  const gameFinished = !!treeResult || isGameOver;
   const [gameOverDismissed, setGameOverDismissed] = useState(false);
-  const prevGameOver = useRef(isGameOver);
-  // Reset dismissed state when a new game starts (isGameOver goes false).
-  if (!isGameOver && prevGameOver.current) {
+  const prevGameFinished = useRef(gameFinished);
+  // Reset dismissed state when a new game starts.
+  if (!gameFinished && prevGameFinished.current) {
     setGameOverDismissed(false);
   }
-  prevGameOver.current = isGameOver;
+  prevGameFinished.current = gameFinished;
 
-  const showGameOverModal = isGameOver && !gameOverDismissed;
+  const showGameOverModal = gameFinished && !gameOverDismissed;
 
   // ─── Promotion dialog state ────────────────────────────────────
   const [showPromotion, setShowPromotion] = useState(false);
@@ -277,15 +281,18 @@ export default function Board({ orientation = 'white' }: BoardProps) {
   }, [lastMoveFrom, lastMoveTo, legalMoveSquares]);
 
   // ─── Game-over headline ─────────────────────────────────────────
+  // Use the game-level result (tree.result) which is set regardless of
+  // whether the ending happened on the mainline or a branch.
+  const displayResult = treeResult ?? result;
   let gameOverHeadline = 'Game Over';
   let gameOverSubtext = '';
-  if (result === '1-0') {
+  if (displayResult === '1-0') {
     gameOverHeadline = 'White wins';
     gameOverSubtext = inCheck ? 'by checkmate' : '';
-  } else if (result === '0-1') {
+  } else if (displayResult === '0-1') {
     gameOverHeadline = 'Black wins';
     gameOverSubtext = inCheck ? 'by checkmate' : '';
-  } else if (result === '1/2-1/2') {
+  } else if (displayResult === '1/2-1/2') {
     gameOverHeadline = 'Draw';
     gameOverSubtext = 'by stalemate or repetition';
   }
@@ -333,8 +340,8 @@ export default function Board({ orientation = 'white' }: BoardProps) {
             {gameOverSubtext && (
               <p className="text-sm text-slate-400">{gameOverSubtext}</p>
             )}
-            {result && (
-              <span className="font-mono text-lg text-slate-300">{result}</span>
+            {displayResult && (
+              <span className="font-mono text-lg text-slate-300">{displayResult}</span>
             )}
             <div className="flex gap-3 pt-2">
               <button

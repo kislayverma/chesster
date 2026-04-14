@@ -124,24 +124,42 @@ function persistTree(
 function maybeFinishMainGame(
   tree: GameTree,
   humanColor: 'w' | 'b',
-  engineEnabled: boolean
+  engineEnabled: boolean,
+  /** Current node ID — so a game-over on a branch also finishes the game. */
+  currentNodeId?: string,
 ): void {
   if (finishedGameIds.has(tree.id)) return;
+
+  // Check the mainline head first, then fall back to the current node
+  // (which may be on a branch). Either reaching game-over ends the game.
+  let chess: InstanceType<typeof Chess> | null = null;
+
   const headNode = tree.nodes.get(tree.mainGameHeadId);
-  if (!headNode) return;
-  const headChess = new Chess(headNode.fen);
-  if (!headChess.isGameOver()) return;
+  if (headNode) {
+    const c = new Chess(headNode.fen);
+    if (c.isGameOver()) chess = c;
+  }
+
+  if (!chess && currentNodeId && currentNodeId !== tree.mainGameHeadId) {
+    const curNode = tree.nodes.get(currentNodeId);
+    if (curNode) {
+      const c = new Chess(curNode.fen);
+      if (c.isGameOver()) chess = c;
+    }
+  }
+
+  if (!chess) return;
 
   finishedGameIds.add(tree.id);
 
   // Sync the tree.result marker so persisted games show the outcome.
   let result: GameTree['result'] = null;
-  if (headChess.isCheckmate()) {
-    result = headChess.turn() === 'w' ? '0-1' : '1-0';
+  if (chess.isCheckmate()) {
+    result = chess.turn() === 'w' ? '0-1' : '1-0';
   } else if (
-    headChess.isDraw() ||
-    headChess.isStalemate() ||
-    headChess.isThreefoldRepetition()
+    chess.isDraw() ||
+    chess.isStalemate() ||
+    chess.isThreefoldRepetition()
   ) {
     result = '1/2-1/2';
   }
@@ -642,7 +660,8 @@ export const useGameStore = create<GameStore>((set, get) => {
           maybeFinishMainGame(
             saveState.tree,
             saveState.humanColor,
-            saveState.engineEnabled
+            saveState.engineEnabled,
+            saveState.currentNodeId,
           );
           persistTree(
             saveState.tree,
@@ -750,8 +769,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         });
 
         // Phase 5: persist tree + mark game finished if the engine's
-        // move just ended the main game.
-        maybeFinishMainGame(t3, state.humanColor, state.engineEnabled);
+        // move ended the game (mainline or branch).
+        maybeFinishMainGame(t3, state.humanColor, state.engineEnabled, targetId);
         persistTree(t3, state.humanColor, state.engineEnabled);
 
         kickAnalysis(targetNode.fen, snap.turn, nextSeq);

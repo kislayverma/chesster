@@ -20,6 +20,7 @@ export default function PlayPage() {
   const inCheck = useGameStore((s) => s.inCheck);
   const isGameOver = useGameStore((s) => s.isGameOver);
   const result = useGameStore((s) => s.result);
+  const treeResult = useGameStore((s) => s.tree.result);
   const reset = useGameStore((s) => s.reset);
   const resign = useGameStore((s) => s.resign);
   const goBack = useGameStore((s) => s.goBack);
@@ -35,9 +36,14 @@ export default function PlayPage() {
   const setHumanColor = useGameStore((s) => s.setHumanColor);
   const setSkillLevel = useGameStore((s) => s.setSkillLevel);
 
-  const statusLine = isGameOver
-    ? result
-      ? `Game over · ${result}`
+  // The game is finished when tree.result is set (covers endings on any
+  // branch) or when the current position itself is game-over.
+  const gameFinished = !!treeResult || isGameOver;
+  const displayResult = treeResult ?? result;
+
+  const statusLine = gameFinished
+    ? displayResult
+      ? `Game over · ${displayResult}`
       : 'Game over'
     : `${turn === 'w' ? 'White' : 'Black'} to move${inCheck ? ' · check' : ''}`;
 
@@ -118,7 +124,7 @@ export default function PlayPage() {
             &rarr;
           </button>
 
-          {!isGameOver && historyLength > 0 && (
+          {!gameFinished && historyLength > 0 && (
             <button
               type="button"
               onClick={() => {
@@ -151,7 +157,7 @@ export default function PlayPage() {
 
       {/* Column 2: Settings + Coach (desktop) + Moves */}
       <aside className="flex flex-col gap-3 lg:gap-4 lg:w-64">
-        {!isGameOver && (
+        {!gameFinished && (
           <div className="rounded border border-slate-800 bg-slate-900/40 p-3 lg:p-4">
             <h2 className="mb-3 text-sm font-semibold text-slate-200">
               Game settings
