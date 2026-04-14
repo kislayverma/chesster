@@ -25,10 +25,12 @@ export default function CoachPanel() {
   const coachSource = useGameStore((s) => s.lastMoveCoachSource);
   const bestMoveBefore = useGameStore((s) => s.lastMoveBestMoveBefore);
   const thinking = useGameStore((s) => s.thinking);
+  const isGameOver = useGameStore((s) => s.isGameOver);
   const historyLength = useGameStore((s) => s.history.length);
   const tryThisLine = useGameStore((s) => s.tryThisLine);
 
   const showTryThis =
+    !isGameOver &&
     !!bestMoveBefore &&
     (quality === 'inaccuracy' || quality === 'mistake' || quality === 'blunder');
 

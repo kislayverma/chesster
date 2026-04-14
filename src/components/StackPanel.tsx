@@ -14,6 +14,7 @@ import { useGameStore } from '../game/gameStore';
 import type { GameTree, StackFrame } from '../game/gameTree';
 import { getBranchCap } from '../lib/branchLimit';
 import MiniBoard from './MiniBoard';
+import type { CustomSquareStyles } from 'react-chessboard/dist/chessboard/types';
 
 interface FramePreview {
   frame: StackFrame;
@@ -21,10 +22,16 @@ interface FramePreview {
   tipFen: string | null;
   /** SAN of the first move in this branch (the "tried" move). */
   branchMove: string | null;
+  /** UCI of the first move in this branch (e.g. "g1f3"). */
+  branchMoveUci: string | null;
   /** Move number where the fork occurred (e.g. 5 for ply 9 or 10). */
   forkMoveNumber: number | null;
+  /** FEN at the fork point (the position before either move). */
+  forkFen: string | null;
   /** SAN of the mainline continuation at the fork point. */
   mainlineMove: string | null;
+  /** UCI of the mainline continuation at the fork point. */
+  mainlineMoveUci: string | null;
   /** Eval delta in centipawns (branch eval − mainline eval), white-relative. */
   evalDelta: number | null;
 }
@@ -38,12 +45,19 @@ function buildPreview(tree: GameTree, frame: StackFrame): FramePreview {
   const tipFen = tipId ? tree.nodes.get(tipId)?.fen ?? null : null;
 
   let branchMove: string | null = null;
+  let branchMoveUci: string | null = null;
   let forkMoveNumber: number | null = null;
+  let forkFen: string | null = null;
   let mainlineMove: string | null = null;
+  let mainlineMoveUci: string | null = null;
   let evalDelta: number | null = null;
 
   if (frame.index > 0 && frame.forkPointNodeId) {
     const forkNode = tree.nodes.get(frame.forkPointNodeId);
+
+    if (forkNode) {
+      forkFen = forkNode.fen;
+    }
 
     // The branch's first move.
     const branchFirstId = frame.nodeIds[0];
@@ -52,6 +66,7 @@ function buildPreview(tree: GameTree, frame: StackFrame): FramePreview {
       : undefined;
     if (branchFirstNode) {
       branchMove = branchFirstNode.move || null;
+      branchMoveUci = branchFirstNode.uci || null;
     }
 
     // Move number at the fork point.
@@ -74,6 +89,7 @@ function buildPreview(tree: GameTree, frame: StackFrame): FramePreview {
             : undefined;
           if (mainNextNode) {
             mainlineMove = mainNextNode.move || null;
+            mainlineMoveUci = mainNextNode.uci || null;
 
             // Eval delta: compare branch first move to mainline continuation.
             if (
@@ -93,8 +109,11 @@ function buildPreview(tree: GameTree, frame: StackFrame): FramePreview {
     moveCount,
     tipFen,
     branchMove,
+    branchMoveUci,
     forkMoveNumber,
+    forkFen,
     mainlineMove,
+    mainlineMoveUci,
     evalDelta,
   };
 }
@@ -129,6 +148,45 @@ function EvalDeltaBadge({ delta }: { delta: number }) {
       {isBetter ? '+' : '-'}{display}
     </span>
   );
+}
+
+const WRONG_MOVE_STYLE = { backgroundColor: 'rgba(239, 68, 68, 0.45)' };
+const ALT_MOVE_STYLE = { backgroundColor: 'rgba(34, 197, 94, 0.45)' };
+
+/** Parse a UCI string like "g1f3" into [from, to] square names. */
+function parseUciSquares(uci: string): [string, string] | null {
+  if (uci.length < 4) return null;
+  return [uci.slice(0, 2), uci.slice(2, 4)];
+}
+
+/**
+ * Build square highlight styles for a branch frame's fork position:
+ * - Red on the from/to squares of the user's original (wrong) move
+ * - Green on the from/to squares of the alternate (better) move
+ */
+function buildForkHighlights(preview: FramePreview): CustomSquareStyles | undefined {
+  if (!preview.mainlineMoveUci && !preview.branchMoveUci) return undefined;
+  const styles: CustomSquareStyles = {};
+
+  // Red: the user's original move (mainline continuation)
+  if (preview.mainlineMoveUci) {
+    const sq = parseUciSquares(preview.mainlineMoveUci);
+    if (sq) {
+      styles[sq[0] as keyof CustomSquareStyles] = WRONG_MOVE_STYLE;
+      styles[sq[1] as keyof CustomSquareStyles] = WRONG_MOVE_STYLE;
+    }
+  }
+
+  // Green: the alternate move (what the branch explores)
+  if (preview.branchMoveUci) {
+    const sq = parseUciSquares(preview.branchMoveUci);
+    if (sq) {
+      styles[sq[0] as keyof CustomSquareStyles] = ALT_MOVE_STYLE;
+      styles[sq[1] as keyof CustomSquareStyles] = ALT_MOVE_STYLE;
+    }
+  }
+
+  return Object.keys(styles).length > 0 ? styles : undefined;
 }
 
 export default function StackPanel() {
@@ -238,31 +296,41 @@ export default function StackPanel() {
                   </div>
                 </div>
 
-                {/* Fork context: "You played X · Instead: Y" */}
+                {/* Fork context: "You played X · Instead: Y" with color coding */}
                 {!isMainline && preview.mainlineMove && preview.branchMove && (
                   <div className="text-[11px] leading-snug text-slate-400">
-                    You played{' '}
-                    <span className="font-mono text-slate-300">
+                    <span className="inline-block h-2 w-2 rounded-sm bg-red-500/70 mr-0.5 align-middle" />
+                    {' You played '}
+                    <span className="font-mono text-red-300">
                       {preview.mainlineMove}
                     </span>
-                    {' · Instead: '}
-                    <span className="font-mono text-slate-200">
+                    {' · '}
+                    <span className="inline-block h-2 w-2 rounded-sm bg-green-500/70 mr-0.5 align-middle" />
+                    {' Instead: '}
+                    <span className="font-mono text-green-300">
                       {preview.branchMove}
                     </span>
                   </div>
                 )}
 
-                {/* Mini board preview */}
-                {preview.tipFen ? (
-                  <MiniBoard
-                    fen={preview.tipFen}
-                    orientation={boardOrientation}
-                  />
-                ) : (
-                  <div className="flex aspect-square w-full items-center justify-center rounded bg-slate-800 text-[10px] text-slate-600">
-                    no position
-                  </div>
-                )}
+                {/* Mini board preview — branch frames show the fork
+                    position with wrong move (red) and alternate (green). */}
+                {(() => {
+                  const useForkView = !isMainline && preview.forkFen;
+                  const boardFen = useForkView ? preview.forkFen! : preview.tipFen;
+                  const highlights = useForkView ? buildForkHighlights(preview) : undefined;
+                  return boardFen ? (
+                    <MiniBoard
+                      fen={boardFen}
+                      orientation={boardOrientation}
+                      customSquareStyles={highlights}
+                    />
+                  ) : (
+                    <div className="flex aspect-square w-full items-center justify-center rounded bg-slate-800 text-[10px] text-slate-600">
+                      no position
+                    </div>
+                  );
+                })()}
               </button>
             </li>
           );
