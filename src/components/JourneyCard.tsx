@@ -5,7 +5,7 @@
 
 import { useProfileStore } from '../profile/profileStore';
 import { getLevelDef, nextLevel, acplToRating } from '../lib/rating';
-import { levelFocusAreas } from '../lib/journey';
+import { levelFocusAreas, MIN_GAMES_FOR_PROMOTION } from '../lib/journey';
 import { MOTIF_LABELS, type MotifId } from '../tagging/motifs';
 
 export default function JourneyCard() {
@@ -27,6 +27,8 @@ export default function JourneyCard() {
   const pointsToNext = next
     ? Math.max(0, next.floor - journey.rollingRating)
     : 0;
+
+  const gamesNeeded = Math.max(0, MIN_GAMES_FOR_PROMOTION - journey.gamesAtCurrentLevel);
 
   return (
     <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
@@ -61,7 +63,9 @@ export default function JourneyCard() {
           <p className="mt-1 text-[11px] text-slate-500">
             {pointsToNext > 0
               ? `${pointsToNext} rating points to go`
-              : 'Rating threshold reached — keep playing to level up!'}
+              : gamesNeeded > 0
+                ? `Rating reached — play ${gamesNeeded} more game${gamesNeeded !== 1 ? 's' : ''} at this level to promote`
+                : 'Rating threshold reached — keep playing to level up!'}
           </p>
         </div>
       )}

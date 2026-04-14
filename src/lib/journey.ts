@@ -24,7 +24,7 @@ import type { MotifId } from '../tagging/motifs';
 /* ─── Constants ───────────────────────────────────────────────────── */
 
 /** Minimum games at a level before promotion is allowed. */
-const MIN_GAMES_FOR_PROMOTION = 5;
+export const MIN_GAMES_FOR_PROMOTION = 5;
 
 /** Maximum mistake-review credits per day. */
 export const MAX_REVIEW_CREDITS_PER_DAY = 3;
@@ -175,6 +175,13 @@ export function processGameFinished(
 
   // ── Promotion check ────────────────────────────────────────────
   const promoted = checkPromotion(next);
+
+  // If progress hit 100% but promotion was blocked (not enough games
+  // at the current level), cap at 99% so the bar never sits at 100%
+  // without a promotion actually happening.
+  if (!promoted && next.levelProgress >= 100 && nextLevel(next.currentLevel)) {
+    next.levelProgress = 99;
+  }
   if (promoted) {
     next.currentLevel = promoted.key;
     next.gamesAtCurrentLevel = 0;
@@ -217,6 +224,12 @@ export function processMistakeReview(
 
   // Check promotion after progress bump
   const promoted = checkPromotion(next);
+
+  // Cap at 99% if promotion is blocked (not enough games at level).
+  if (!promoted && next.levelProgress >= 100 && nextLevel(next.currentLevel)) {
+    next.levelProgress = 99;
+  }
+
   if (promoted) {
     next.currentLevel = promoted.key;
     next.gamesAtCurrentLevel = 0;

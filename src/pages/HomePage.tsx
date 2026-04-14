@@ -9,6 +9,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../auth/authStore';
 import { useProfileStore } from '../profile/profileStore';
 import { acplToRating, ratingStanding, ALL_LEVELS, getLevelDef, nextLevel } from '../lib/rating';
+import { MIN_GAMES_FOR_PROMOTION } from '../lib/journey';
 import PromotionBanner from '../components/PromotionBanner';
 
 /** Chess piece Unicode for each level. */
@@ -57,6 +58,7 @@ export default function HomePage() {
     const levelDef = getLevelDef(journey?.currentLevel ?? 'newcomer');
     const next = nextLevel(journey?.currentLevel ?? 'newcomer');
     const progress = totalGames > 0 ? (journey?.levelProgress ?? 0) : 0;
+    const gamesNeeded = Math.max(0, MIN_GAMES_FOR_PROMOTION - (journey?.gamesAtCurrentLevel ?? 0));
 
     return (
       <main className="mx-auto flex max-w-3xl flex-1 flex-col items-center justify-center gap-6 p-3 md:gap-8 md:p-6">
@@ -83,7 +85,11 @@ export default function HomePage() {
             />
           </div>
           <p className="mt-1 text-center text-xs text-slate-500">
-            {next ? `${progress}% to ${next.name}` : 'You\'ve reached the top!'}
+            {next
+              ? progress >= 99 && gamesNeeded > 0
+                ? `Almost there — play ${gamesNeeded} more game${gamesNeeded !== 1 ? 's' : ''} to promote`
+                : `${progress}% to ${next.name}`
+              : 'You\'ve reached the top!'}
           </p>
         </div>
 
