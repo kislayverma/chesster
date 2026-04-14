@@ -6,14 +6,23 @@
  * While the user isn't signed in we cap the number of exploration
  * frames that can sit on top of the mainline — going deeper requires
  * popping the stack first. Mainline itself (frame 0) is never counted
- * or capped.
+ * or capped. Logged-in users have unlimited branches.
  */
 
 import type { GameTree } from '../game/gameTree';
 import { stackDepth } from '../game/gameTree';
+import { isAuthenticated } from '../auth/authStore';
 
 /** Hard cap on exploration frames above the mainline for anonymous users. */
-export const MAX_ANON_BRANCHES = 3;
+export const MAX_ANON_BRANCHES = 2;
+
+/**
+ * Return the effective branch cap for the current user.
+ * Authenticated users are unlimited; anonymous users are capped.
+ */
+export function getBranchCap(): number {
+  return isAuthenticated() ? Infinity : MAX_ANON_BRANCHES;
+}
 
 /**
  * Number of exploration frames currently sitting on the stack above

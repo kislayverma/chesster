@@ -67,7 +67,7 @@ import {
   type MoveNode,
   type StackFrame,
 } from './gameTree';
-import { MAX_ANON_BRANCHES } from '../lib/branchLimit';
+import { getBranchCap } from '../lib/branchLimit';
 import { useProfileStore } from '../profile/profileStore';
 import { usePracticeStore } from '../srs/practiceStore';
 import type { WeaknessEvent } from '../profile/types';
@@ -703,7 +703,7 @@ export const useGameStore = create<GameStore>((set, get) => {
             // only happen after navigation into a mid-frame position
             // followed by auto-play). Push a new frame, subject to
             // the stack cap.
-            if (stackDepth(t3) >= MAX_ANON_BRANCHES) {
+            if (stackDepth(t3) >= getBranchCap()) {
               console.warn(
                 '[engine] stack cap reached, dropping engine move',
                 engineUci
@@ -818,7 +818,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         tree.stackFrames[0];
       const willPushFrame = !isFrameTip(curFrame, currentNodeId);
 
-      if (willPushFrame && stackDepth(tree) >= MAX_ANON_BRANCHES) {
+      if (willPushFrame && stackDepth(tree) >= getBranchCap()) {
         // Silently refuse — the stack panel already shows the cap.
         return false;
       }
@@ -942,7 +942,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       // "Try this line" always spawns a new frame — even if the user
       // made the move at the tip of the current frame, we're forking
       // off the *parent* position (the one BEFORE the user's move).
-      if (stackDepth(tree) >= MAX_ANON_BRANCHES) {
+      if (stackDepth(tree) >= getBranchCap()) {
         return;
       }
 

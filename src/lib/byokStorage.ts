@@ -11,7 +11,7 @@
  *     `/api/tag-move`. Our server uses it for that one request, then
  *     lets the ephemeral `Anthropic` client fall out of scope.
  *   • localforage picks IndexedDB on modern browsers; the payload is
- *     scoped to the Chesster origin.
+ *     scoped to the altmove origin.
  *   • `clearByokKey` wipes the record and notifies any subscribers
  *     (see `featureFlags.ts`) so the in-memory copy is dropped too.
  *

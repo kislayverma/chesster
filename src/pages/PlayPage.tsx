@@ -21,7 +21,6 @@ export default function PlayPage() {
   const result = useGameStore((s) => s.result);
   const reset = useGameStore((s) => s.reset);
   const resign = useGameStore((s) => s.resign);
-  const undo = useGameStore((s) => s.undo);
   const goBack = useGameStore((s) => s.goBack);
   const goForward = useGameStore((s) => s.goForward);
   const historyLength = useGameStore((s) => s.history.length);
@@ -103,14 +102,6 @@ export default function PlayPage() {
             &rarr;
           </button>
 
-          <button
-            type="button"
-            onClick={undo}
-            disabled={historyLength === 0}
-            className="rounded bg-slate-800 px-2 py-1 text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 lg:px-3"
-          >
-            Undo
-          </button>
           {!isGameOver && historyLength > 0 && (
             <button
               type="button"

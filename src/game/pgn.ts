@@ -8,7 +8,7 @@
  *
  * Example output:
  *
- *   [Event "Chesster Game"]
+ *   [Event "altmove Game"]
  *   [Date "2025.04.12"]
  *   [White "Human"]
  *   [Black "Stockfish"]
@@ -86,7 +86,7 @@ function walkNode(
  * (headers + movetext + result terminator).
  */
 export function exportPgn(tree: GameTree, options: PgnOptions = {}): string {
-  const { humanColor = 'w', event = 'Chesster Game' } = options;
+  const { humanColor = 'w', event = 'altmove Game' } = options;
 
   const white = humanColor === 'w' ? 'Human' : 'Stockfish';
   const black = humanColor === 'b' ? 'Human' : 'Stockfish';
@@ -94,7 +94,7 @@ export function exportPgn(tree: GameTree, options: PgnOptions = {}): string {
 
   const headers = [
     headerTag('Event', event),
-    headerTag('Site', 'Chesster'),
+    headerTag('Site', 'altmove'),
     headerTag('Date', formatDate(tree.startedAt)),
     headerTag('White', white),
     headerTag('Black', black),

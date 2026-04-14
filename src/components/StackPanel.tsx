@@ -12,7 +12,7 @@
 
 import { useGameStore } from '../game/gameStore';
 import type { GameTree, StackFrame } from '../game/gameTree';
-import { MAX_ANON_BRANCHES } from '../lib/branchLimit';
+import { getBranchCap } from '../lib/branchLimit';
 import MiniBoard from './MiniBoard';
 
 interface FramePreview {
@@ -144,7 +144,8 @@ export default function StackPanel() {
   // Render top-of-stack first (reverse of push order).
   const ordered = [...stackFrames].reverse();
   const depth = Math.max(0, stackFrames.length - 1);
-  const capReached = depth >= MAX_ANON_BRANCHES;
+  const cap = getBranchCap();
+  const capReached = depth >= cap;
 
   const mainlineFrameId = stackFrames[0]?.id;
   const isOnBranch = currentFrameId !== mainlineFrameId;
@@ -162,7 +163,7 @@ export default function StackPanel() {
             }`}
             title="Exploration branches"
           >
-            {depth}/{MAX_ANON_BRANCHES}
+            {Number.isFinite(cap) ? `${depth}/${cap}` : `${depth}`}
           </span>
         )}
       </div>

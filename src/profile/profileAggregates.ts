@@ -39,14 +39,14 @@ const PHASE_WINDOW = 50;
 export function createEmptyJourneyState(): JourneyState {
   return {
     calibrationGamesPlayed: 0,
-    calibrated: false,
+    calibrated: true,
     currentLevel: 'newcomer',
     levelProgress: 0,
     rollingRating: 0,
     gamesAtCurrentLevel: 0,
     reviewCreditsToday: 0,
     reviewCreditDate: new Date().toISOString().slice(0, 10),
-    promotionHistory: [],
+    promotionHistory: [{ level: 'newcomer', timestamp: Date.now() }],
     lastPromotionDismissed: true,
   };
 }

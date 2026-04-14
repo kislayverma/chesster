@@ -121,19 +121,17 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
   },
 
   replaceProfile: (next) => {
-    // If the local journey state is more advanced (more calibration
-    // games, already calibrated, or more total games), keep it. This
-    // prevents a stale remote pull from wiping local progress during
-    // the debounce window after a game finishes or when the server
-    // has an empty '{}' journey_state.
+    // If the local journey state is more advanced (more games played
+    // at current level, higher level, etc.), keep it. This prevents a
+    // stale remote pull from wiping local progress during the debounce
+    // window after a game finishes or when the server has an empty
+    // '{}' journey_state.
     const local = get().profile.journeyState;
     const remote = next.journeyState;
     if (local) {
-      const localPlayed = local.calibrationGamesPlayed ?? 0;
-      const remotePlayed = remote?.calibrationGamesPlayed ?? 0;
-      const localMoreAdvanced =
-        localPlayed > remotePlayed ||
-        (local.calibrated && !remote?.calibrated);
+      const localGames = local.gamesAtCurrentLevel ?? 0;
+      const remoteGames = remote?.gamesAtCurrentLevel ?? 0;
+      const localMoreAdvanced = localGames > remoteGames;
       if (localMoreAdvanced) {
         next = { ...next, journeyState: local };
       }

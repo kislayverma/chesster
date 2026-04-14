@@ -1,4 +1,4 @@
-# Chesster — Design Document
+# altmove — Design Document
 
 > **Status:** Phase 5 complete ✓ — persistent player profile (`src/profile/{types,profileAggregates,weaknessSelector,profileStore}.ts`) with exponential-decay motif counts (`HALFLIFE_MS = 14d`) + `getTopWeaknesses` + localforage persistence, WeaknessEvents now appended on every human inaccuracy/mistake/blunder inside `kickAnalysis`, game trees persisted via `src/game/gameStorage.ts` (keyed by tree id, with a lightweight `chesster:games:index`), coach template layer biased by `profileSummary.topMotifs` with a "recurring weakness" reinforcement suffix when decayed count ≥ 3, new `WeaknessDashboard` (CSS bar graphs + SVG sparkline, no chart lib) embedded in `DashboardPage`, flat `MistakesPage` with motif + phase filters, `NavShell` header with Play/Dashboard/Mistakes nav links, and `react-router-dom` routing wired through `BrowserRouter` in `main.tsx`. `tsc -b` and `npm run build` clean (107 modules, 394.40 kB / 122.84 kB gzipped). Phase 6 (SRS practice) is next. This doc contains the full architecture **and** a per-phase TODO checklist. You can resume work at any time by reading the checklists in §15.
 
@@ -6,7 +6,7 @@
 
 ## 1. Overview
 
-Chesster is a browser-based chess learning application. The player plays a full game against Stockfish, and after every move a coach explains how good or bad the move was and what the engine's preferred move would have been.
+altmove is a browser-based chess learning application. The player plays a full game against Stockfish, and after every move a coach explains how good or bad the move was and what the engine's preferred move would have been.
 
 The two distinguishing features are:
 
@@ -16,13 +16,13 @@ The two distinguishing features are:
 
 ### LLM is optional — default is BYOK
 
-Chesster works fully offline with zero external dependencies. The default LLM mode is **`byok-only`**: coaching upgrades to Claude-generated prose only for users who paste their own `ANTHROPIC_API_KEY` in Settings. Anonymous and logged-in users without a key get deterministic rule-based detectors + hand-authored templates. **Every user-visible feature works in both modes.** LLM mode only upgrades *quality*, not *capability*.
+altmove works fully offline with zero external dependencies. The default LLM mode is **`byok-only`**: coaching upgrades to Claude-generated prose only for users who paste their own `ANTHROPIC_API_KEY` in Settings. Anonymous and logged-in users without a key get deterministic rule-based detectors + hand-authored templates. **Every user-visible feature works in both modes.** LLM mode only upgrades *quality*, not *capability*.
 
 A shared `free-tier` mode (server-funded quota) is designed in §12a but **deferred** — it would require a rate-limit store we are not adding yet.
 
 ### Public hosting
 
-Chesster is designed to be deployed as a single public web app. The whole thing — static frontend + serverless functions + auth + database — runs on **Vercel + Supabase**, with the frontend also runnable standalone for local development without any cloud dependency. Login is optional: anonymous users get a fully working local-only experience; logging in migrates their local data server-side and enables cross-device sync. Anonymous users are capped at **3 parallel exploration timelines** per game to limit abuse of the browser-only state.
+altmove is designed to be deployed as a single public web app. The whole thing — static frontend + serverless functions + auth + database — runs on **Vercel + Supabase**, with the frontend also runnable standalone for local development without any cloud dependency. Login is optional: anonymous users get a fully working local-only experience; logging in migrates their local data server-side and enables cross-device sync. Anonymous users are capped at **3 parallel exploration timelines** per game to limit abuse of the browser-only state.
 
 ---
 
@@ -53,7 +53,7 @@ Chesster is designed to be deployed as a single public web app. The whole thing 
 ## 3. Project Structure
 
 ```
-chesster/
+altmove/
 ├── DESIGN.md
 ├── README.md
 ├── .gitignore
@@ -166,7 +166,7 @@ chesster/
 
 ### 3a. Screens & Navigation
 
-Chesster is not just a game page — it's a small multi-page app. All routes are client-side except auth callbacks.
+altmove is not just a game page — it's a small multi-page app. All routes are client-side except auth callbacks.
 
 | Route | Page | Auth | Purpose |
 |---|---|---|---|
@@ -912,7 +912,7 @@ If the rolling Elo drops significantly below the current level's floor, the prog
 
 The Home page renders three distinct views based on auth + journey state:
 
-1. **Not logged in** — Generic hero ("Welcome to Chesster"), feature pitch, "Play now" CTA, feature cards. No journey UI. This is the current behavior, unchanged.
+1. **Not logged in** — Generic hero ("Welcome to altmove"), feature pitch, "Play now" CTA, feature cards. No journey UI. This is the current behavior, unchanged.
 
 2. **Logged in, not yet calibrated** — Journey pitch section:
    - Headline: "Your Chess Journey Starts Here"

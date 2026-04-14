@@ -1,7 +1,6 @@
 /**
  * JourneyCard — shows current level, progress bar, rolling rating,
- * next milestone, and focus areas.  Only rendered for authenticated
- * users who have completed calibration.
+ * next milestone, and focus areas.  Only rendered for authenticated users.
  */
 
 import { useProfileStore } from '../profile/profileStore';
@@ -13,7 +12,7 @@ export default function JourneyCard() {
   const journey = useProfileStore((s) => s.profile.journeyState);
   const acplHistory = useProfileStore((s) => s.profile.acplHistory);
 
-  if (!journey?.calibrated) return null;
+  if (!journey) return null;
 
   const current = getLevelDef(journey.currentLevel);
   const next = nextLevel(journey.currentLevel);

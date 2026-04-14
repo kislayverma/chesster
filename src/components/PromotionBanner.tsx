@@ -12,7 +12,7 @@ export default function PromotionBanner() {
   const journey = useProfileStore((s) => s.profile.journeyState);
   const dismiss = useProfileStore((s) => s.dismissPromotion);
 
-  if (!journey?.calibrated || journey.lastPromotionDismissed) return null;
+  if (!journey || journey.lastPromotionDismissed) return null;
 
   const level = getLevelDef(journey.currentLevel);
   const focusMotifs = levelFocusAreas(journey.currentLevel);

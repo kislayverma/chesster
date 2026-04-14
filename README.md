@@ -1,8 +1,8 @@
-# Chesster
+# altmove
 
 A browser-based chess learning app. Play Stockfish. Get real-time per-move coaching. When the coach suggests a better move, **fork** into an alternate reality where you played it — explore, play it out, then **return** to your main game right where you left off. Every mistake feeds a persistent weakness profile that personalizes future coaching and builds a spaced-repetition deck of drills from your own blunders.
 
-**LLM is optional (BYOK-only by default).** Chesster runs fully offline with rule-based coaching and hand-authored templates. Users who want Claude-generated prose can paste their own `ANTHROPIC_API_KEY` in Settings — the key lives in their browser, is sent to our serverless proxy on a per-request header, used once, and discarded. No server-funded shared quota is enabled in v1. Every structural feature (play, forking, weakness tracking, drills, dashboards, sync) works in both modes.
+**LLM is optional (BYOK-only by default).** altmove runs fully offline with rule-based coaching and hand-authored templates. Users who want Claude-generated prose can paste their own `ANTHROPIC_API_KEY` in Settings — the key lives in their browser, is sent to our serverless proxy on a per-request header, used once, and discarded. No server-funded shared quota is enabled in v1. Every structural feature (play, forking, weakness tracking, drills, dashboards, sync) works in both modes.
 
 For the full architecture and phase-by-phase TODO checklists see [`DESIGN.md`](./DESIGN.md).
 
@@ -12,7 +12,7 @@ Phases 1 – 9, 12 complete. The app ships:
 
 - Playable chess vs Stockfish (single-threaded lite, no COOP/COEP)
 - Real-time per-move coaching (`best` → `blunder` quality badges + arrows)
-- Inline fork-and-return (stack of exploration frames, anon cap = 3)
+- Inline fork-and-return (stack of exploration frames, anon cap = 2, unlimited for signed-in users)
 - Persistent weakness profile with dashboard + mistakes list
 - Phase 5 routing (`NavShell` + `/`, `/dashboard`, `/mistakes`, `/settings`)
 - Phase 7 BYOK LLM proxy — `/api/health`, `/api/explain-move`, `/api/tag-move` run on Vercel Edge with `@anthropic-ai/sdk`
@@ -32,7 +32,7 @@ Phases 10 – 11 (extended journey pages, legal/hardening) are still on the road
 
 ## Hosting
 
-Chesster is designed to be deployed as **a single Vercel project**:
+altmove is designed to be deployed as **a single Vercel project**:
 
 - The Vite build (`npm run build`) produces a static `dist/` that Vercel serves from the edge.
 - Anything under `api/` at the repo root becomes a serverless function automatically. Phase 7 handlers run on the **Edge Runtime** (`export const config = { runtime: 'edge' }`).
@@ -76,7 +76,7 @@ See `DESIGN.md` §12a for the full public hosting architecture and the Phase 9 d
 
 ## LLM mode
 
-Chesster has three named LLM modes. Only the first two are active in v1.
+altmove has three named LLM modes. Only the first two are active in v1.
 
 | Mode | Status | Description |
 |---|---|---|
@@ -143,7 +143,7 @@ Set these in the Vercel dashboard (production) or `.env.local` (local). `VITE_*`
 | Best-move suggestion | yes | yes |
 | Coach explanation | Template prose | Claude-generated, personalized |
 | Motif tagging | Rule detectors | Rules + LLM fuzzy themes |
-| Fork "try this line" | yes (anon capped at 3 branches/game) | yes (anon capped at 3 branches/game) |
+| Fork "try this line" | yes (anon capped at 2 branches/game) | yes (anon capped at 2 branches/game, unlimited when signed in) |
 | Weakness profile | yes | yes |
 | Adaptive coaching | Template selection biased by profile | Profile injected into prompt |
 | SRS practice drills | yes | yes |
@@ -158,7 +158,7 @@ Set these in the Vercel dashboard (production) or `.env.local` (local). `VITE_*`
 After Phase 1.5 the repo flattens to a single app:
 
 ```
-chesster/
+altmove/
 ├── DESIGN.md        # full architecture + per-phase TODOs
 ├── README.md        # this file
 ├── package.json     # single app, no workspaces

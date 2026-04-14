@@ -220,14 +220,14 @@ export async function loadProfileRemote(
       ? (row!.journey_state as PlayerProfile['journeyState'])
       : {
           calibrationGamesPlayed: 0,
-          calibrated: false,
+          calibrated: true,
           currentLevel: 'newcomer',
           levelProgress: 0,
           rollingRating: 0,
           gamesAtCurrentLevel: 0,
           reviewCreditsToday: 0,
           reviewCreditDate: new Date().toISOString().slice(0, 10),
-          promotionHistory: [],
+          promotionHistory: [{ level: 'newcomer', timestamp: Date.now() }],
           lastPromotionDismissed: true,
         },
     createdAt: row?.created_at ? Date.parse(row.created_at) : Date.now(),

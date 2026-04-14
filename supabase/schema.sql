@@ -1,4 +1,4 @@
--- Chesster Supabase schema (Phase 9).
+-- altmove Supabase schema (Phase 9).
 --
 -- Run this once in the Supabase SQL editor after creating a new project.
 -- It is idempotent: every statement uses `if not exists` / `create or

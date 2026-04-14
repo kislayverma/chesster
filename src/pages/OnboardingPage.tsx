@@ -164,7 +164,7 @@ export default function OnboardingPage() {
     return (
       <main className="flex flex-1 flex-col items-center justify-center p-3 md:p-6">
         <section className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900/40 p-4 md:p-6">
-          <h1 className="text-xl font-bold text-slate-100">Welcome to Chesster</h1>
+          <h1 className="text-xl font-bold text-slate-100">Welcome to altmove</h1>
           <p className="mt-2 text-sm leading-relaxed text-slate-400">
             What should we call you?
           </p>
@@ -211,7 +211,7 @@ export default function OnboardingPage() {
   return (
     <main className="flex flex-1 flex-col items-center justify-center p-3 md:p-6">
       <section className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900/40 p-4 md:p-6">
-        <h1 className="text-xl font-bold text-slate-100">Welcome to Chesster</h1>
+        <h1 className="text-xl font-bold text-slate-100">Welcome to altmove</h1>
         <p className="mt-2 text-sm leading-relaxed text-slate-400">
           What should we call you?
         </p>

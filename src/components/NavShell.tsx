@@ -12,7 +12,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useGameStore } from '../game/gameStore';
 import { stackDepth } from '../game/gameTree';
-import { MAX_ANON_BRANCHES } from '../lib/branchLimit';
+import { getBranchCap } from '../lib/branchLimit';
 import { getLlmMode, subscribeLlmMode, type LlmMode } from '../lib/featureFlags';
 import { useAuthStore } from '../auth/authStore';
 
@@ -42,6 +42,8 @@ export default function NavShell() {
   const depth = useGameStore((s) => stackDepth(s.tree));
   const [llmMode, setLlmMode] = useState<LlmMode>(getLlmMode());
   const [menuOpen, setMenuOpen] = useState(false);
+  const cap = getBranchCap();
+  const branchLabel = Number.isFinite(cap) ? `${depth}/${cap}` : `${depth}`;
 
   useEffect(() => subscribeLlmMode(setLlmMode), []);
 
@@ -50,7 +52,7 @@ export default function NavShell() {
       <header className="border-b border-slate-800 px-4 py-3 lg:px-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4 lg:items-baseline lg:gap-6">
-            <h1 className="text-xl font-bold tracking-tight">Chesster</h1>
+            <h1 className="text-xl font-bold tracking-tight">altmove</h1>
 
             {/* Desktop nav */}
             <nav className="hidden items-center gap-1 text-sm lg:flex">
@@ -79,7 +81,7 @@ export default function NavShell() {
               className="hidden rounded bg-slate-800 px-2 py-1 text-xs text-slate-300 lg:inline-block"
               title="Exploration frames on top of the mainline. Anonymous users are capped; sign in for unlimited."
             >
-              Branches: {depth}/{MAX_ANON_BRANCHES}
+              Branches: {branchLabel}
             </span>
             <NavLink
               to="/settings"
@@ -137,7 +139,7 @@ export default function NavShell() {
             {/* Mobile-only badges */}
             <div className="mt-2 flex items-center gap-2 border-t border-slate-800 px-3 pt-3">
               <span className="rounded bg-slate-800 px-2 py-1 text-xs text-slate-300">
-                Branches: {depth}/{MAX_ANON_BRANCHES}
+                Branches: {branchLabel}
               </span>
               <NavLink
                 to="/settings"

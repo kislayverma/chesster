@@ -1,9 +1,8 @@
 /**
- * HomePage — three rendering states based on auth + journey:
+ * HomePage — two rendering states based on auth:
  *
  *   1. Not logged in → generic hero + feature cards.
- *   2. Logged in, not calibrated → journey pitch + level ladder + CTA.
- *   3. Logged in, calibrated → greeting + full journey ladder (current highlighted) + progress bar + play CTA.
+ *   2. Logged in → greeting + full journey ladder (current highlighted) + progress bar + play CTA.
  */
 
 import { NavLink } from 'react-router-dom';
@@ -11,7 +10,6 @@ import { useAuthStore } from '../auth/authStore';
 import { useProfileStore } from '../profile/profileStore';
 import { acplToRating, ratingStanding, ALL_LEVELS, getLevelDef, nextLevel } from '../lib/rating';
 import PromotionBanner from '../components/PromotionBanner';
-import CalibrationCard from '../components/CalibrationCard';
 
 /** Chess piece Unicode for each level. */
 const LEVEL_PIECES: Record<string, string> = {
@@ -40,9 +38,6 @@ export default function HomePage() {
   const latestRating = latestAcpl != null ? acplToRating(latestAcpl) : null;
   const latestStanding = latestRating != null ? ratingStanding(latestRating) : null;
 
-  const calibrated = isAuthenticated && journey?.calibrated;
-  const inCalibration = isAuthenticated && !journey?.calibrated;
-
   // While the remote profile is being fetched, show a loading state so
   // we don't flash stale data from a previous session.
   if (syncing) {
@@ -53,37 +48,8 @@ export default function HomePage() {
     );
   }
 
-  // ── State 2: Logged in, not yet calibrated ──────────────────────
-  if (inCalibration) {
-    return (
-      <main className="mx-auto flex max-w-4xl flex-1 flex-col gap-6 p-3 md:gap-10 md:p-6">
-        {/* Hero row: heading + calibration card side by side */}
-        <section className="flex flex-col gap-6 sm:flex-row sm:items-start sm:gap-8">
-          <div className="flex-1">
-            <h1 className="text-3xl font-extrabold tracking-tight text-slate-100">
-              Your Chess Journey Starts Here
-            </h1>
-            <p className="mt-2 text-base leading-relaxed text-slate-400">
-              Chesster tracks your games, finds your weaknesses, and helps you
-              improve step by step. Play 2 games and we'll find your starting
-              level.
-            </p>
-          </div>
-          <div className="sm:w-72 sm:flex-shrink-0">
-            <CalibrationCard />
-          </div>
-        </section>
-
-        {/* Horizontal journey ladder with chess pieces */}
-        <JourneyLadder />
-
-        <FeatureCards />
-      </main>
-    );
-  }
-
-  // ── State 3: Logged in, calibrated ──────────────────────────────
-  if (calibrated) {
+  // ── State 2: Logged in ─────────────────────────────────────────
+  if (isAuthenticated) {
     const name = journey?.displayName || 'there';
     const hour = new Date().getHours();
     const greeting =
@@ -138,7 +104,7 @@ export default function HomePage() {
       {/* Hero */}
       <section className="flex max-w-xl flex-col items-center gap-4 text-center">
         <h1 className="text-4xl font-extrabold tracking-tight text-slate-100">
-          Welcome to Chesster
+          Welcome to altmove
         </h1>
         <p className="text-lg leading-relaxed text-slate-400">
           Play against Stockfish, get move-by-move coaching from an AI coach,
