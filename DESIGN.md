@@ -1,6 +1,6 @@
 # altmove — Design Document
 
-> **Status:** Phase 5 complete ✓ — persistent player profile (`src/profile/{types,profileAggregates,weaknessSelector,profileStore}.ts`) with exponential-decay motif counts (`HALFLIFE_MS = 14d`) + `getTopWeaknesses` + localforage persistence, WeaknessEvents now appended on every human inaccuracy/mistake/blunder inside `kickAnalysis`, game trees persisted via `src/game/gameStorage.ts` (keyed by tree id, with a lightweight `chesster:games:index`), coach template layer biased by `profileSummary.topMotifs` with a "recurring weakness" reinforcement suffix when decayed count ≥ 3, new `WeaknessDashboard` (CSS bar graphs + SVG sparkline, no chart lib) embedded in `DashboardPage`, flat `MistakesPage` with motif + phase filters, `NavShell` header with Play/Dashboard/Mistakes nav links, and `react-router-dom` routing wired through `BrowserRouter` in `main.tsx`. `tsc -b` and `npm run build` clean (107 modules, 394.40 kB / 122.84 kB gzipped). Phase 6 (SRS practice) is next. This doc contains the full architecture **and** a per-phase TODO checklist. You can resume work at any time by reading the checklists in §15.
+> **Status:** All core phases complete. The app is a fully functional chess training platform with Stockfish opponent, AI coaching (BYOK Claude), game tree with branching explorations, weakness profiling, spaced-repetition practice, player journey/progression, Supabase auth + cross-device sync, and a game library with review. `tsc --noEmit` and `vite build` clean (174 modules).
 
 ---
 
@@ -18,11 +18,9 @@ The two distinguishing features are:
 
 altmove works fully offline with zero external dependencies. The default LLM mode is **`byok-only`**: coaching upgrades to Claude-generated prose only for users who paste their own `ANTHROPIC_API_KEY` in Settings. Anonymous and logged-in users without a key get deterministic rule-based detectors + hand-authored templates. **Every user-visible feature works in both modes.** LLM mode only upgrades *quality*, not *capability*.
 
-A shared `free-tier` mode (server-funded quota) is designed in §12a but **deferred** — it would require a rate-limit store we are not adding yet.
-
 ### Public hosting
 
-altmove is designed to be deployed as a single public web app. The whole thing — static frontend + serverless functions + auth + database — runs on **Vercel + Supabase**, with the frontend also runnable standalone for local development without any cloud dependency. Login is optional: anonymous users get a fully working local-only experience; logging in migrates their local data server-side and enables cross-device sync. Anonymous users are capped at **3 parallel exploration timelines** per game to limit abuse of the browser-only state.
+altmove is designed to be deployed as a single public web app. The whole thing — static frontend + serverless functions + auth + database — runs on **Vercel + Supabase**, with the frontend also runnable standalone for local development without any cloud dependency. Login is optional: anonymous users get a fully working local-only experience; logging in migrates their local data server-side and enables cross-device sync. Anonymous users are capped at **2 parallel exploration branches** per game.
 
 ---
 
@@ -31,10 +29,8 @@ altmove is designed to be deployed as a single public web app. The whole thing �
 | Layer | Choice | Rationale |
 |---|---|---|
 | Build / framework | Vite + React 18 + TypeScript | Fast dev loop; Vite output is static, perfect for Vercel's edge |
-| Routing | `react-router-dom` v6 | Client-side routes for the multi-page app (§3a) |
+| Routing | `react-router-dom` v6 | Client-side routes for the multi-page app |
 | Styling | Tailwind CSS | Low-ceremony styling |
-| Charts | `recharts` | Dashboard (top motifs, ACPL over time, phase breakdown) |
-| Utilities | `clsx`, `date-fns` | Class composition; date formatting for history |
 | State | Zustand | Lightweight store, fits the tree-based game state |
 | Local persistence | `localforage` (IndexedDB) | Anonymous-mode game store, practice deck, profile |
 | Chess logic | `chess.js` | Move validation, FEN/PGN, legal moves |
@@ -42,11 +38,8 @@ altmove is designed to be deployed as a single public web app. The whole thing �
 | Engine | `stockfish.wasm` in a Web Worker | World-class strength, runs entirely in the browser, UCI protocol |
 | Server runtime | Vercel Serverless Functions (Node 20) | Single-deployment hosting; no separate backend box |
 | Auth + DB | Supabase (Auth + Postgres + Row-Level Security) | Managed Postgres with built-in JWT auth and per-row access rules |
-| LLM SDK | `@anthropic-ai/sdk` | Ephemeral client per request; key is either server env (`free-tier`, deferred) or the user's own header (`byok-only`) |
-| Server cache | `lru-cache` (in-memory, per function instance) | Zero new infra; opportunistic. No Redis, no Upstash. |
-| Error tracking | Sentry (optional) | Off by default; enabled via env |
-
-**Explicitly not used:** Express, Railway, Neon, Redis, Upstash, Better Auth, Cloudflare Turnstile, Next.js. Each was considered during planning and dropped in favor of the simpler Vercel + Supabase + in-memory stack.
+| LLM SDK | `@anthropic-ai/sdk` | Ephemeral client per request; key from BYOK header |
+| Server cache | `lru-cache` (in-memory, per function instance) | Zero new infra; opportunistic |
 
 ---
 
@@ -55,243 +48,247 @@ altmove is designed to be deployed as a single public web app. The whole thing �
 ```
 altmove/
 ├── DESIGN.md
-├── README.md
-├── .gitignore
-├── package.json                    # single app, no workspaces (after Phase 1.5)
-├── vercel.json                     # routes, function config
+├── package.json
+├── vercel.json
 ├── vite.config.ts
 ├── tsconfig.json
-├── tsconfig.node.json
 ├── tailwind.config.js
 ├── postcss.config.js
 ├── index.html
 │
 ├── public/
-│   └── stockfish/                  # stockfish.wasm + loader (vendored in Phase 2)
+│   └── stockfish/                  # stockfish.wasm + loader (vendored)
 │
-├── src/                            # frontend app
-│   ├── main.tsx
-│   ├── App.tsx                     # <RouterProvider> root
-│   ├── routes.tsx                  # route table (§3a)
-│   ├── index.css
+├── supabase/
+│   ├── schema.sql                  # Full Supabase schema
+│   └── migrations/
+│       ├── 20260412_add_journey_state.sql
+│       └── 20260414_add_byok_keys.sql
+│
+├── src/
+│   ├── main.tsx                    # Entry point, auth init, feature flags
+│   ├── App.tsx                     # <RouterProvider> root, hydration
+│   ├── routes.tsx                  # Route table
+│   ├── index.css                   # Tailwind imports
 │   │
 │   ├── pages/
-│   │   ├── HomePage.tsx
-│   │   ├── PlayPage.tsx            # live game + coach panel + fork UI
-│   │   ├── LibraryPage.tsx         # saved games list
-│   │   ├── GameReviewPage.tsx      # read-only replay of a finished game
-│   │   ├── DashboardPage.tsx       # weakness profile charts
-│   │   ├── MistakesPage.tsx        # flat list of WeaknessEvents with filters
+│   │   ├── HomePage.tsx            # Auth-aware landing (journey ladder / hero)
+│   │   ├── PlayPage.tsx            # Live game + coach + move list + stack
+│   │   ├── LibraryPage.tsx         # Saved games list with filters
+│   │   ├── GameReviewPage.tsx      # Read-only game replay with coach comments
+│   │   ├── MistakesPage.tsx        # Flat list of WeaknessEvents with filters
 │   │   ├── PracticePage.tsx        # SRS drills
-│   │   ├── ProfilePage.tsx
-│   │   ├── SettingsPage.tsx        # BYOK key input, engine depth, LLM toggle
-│   │   ├── LoginPage.tsx
-│   │   ├── OnboardingPage.tsx
-│   │   ├── PrivacyPage.tsx
-│   │   └── TermsPage.tsx
+│   │   ├── ProfilePage.tsx         # Stats, rating, weaknesses
+│   │   ├── SettingsPage.tsx        # BYOK key, data controls
+│   │   ├── LoginPage.tsx           # Email OTP auth
+│   │   └── OnboardingPage.tsx      # New user setup + migration prompt
 │   │
 │   ├── components/
-│   │   ├── Board.tsx               # react-chessboard wrapper
-│   │   ├── EvalBar.tsx             # live engine eval
-│   │   ├── MoveList.tsx            # mainline + variation tree
-│   │   ├── CoachPanel.tsx          # badge + explanation + "try this line"
-│   │   ├── ForkBanner.tsx          # "Exploration mode — Return"
-│   │   ├── WeaknessDashboard.tsx   # charts
-│   │   ├── PracticeDrawer.tsx      # SRS warmup puzzles
-│   │   ├── SettingsPanel.tsx       # engine depth, skill, BYOK key, LLM toggle
-│   │   └── NavShell.tsx            # top nav + sidebar scaffolding
+│   │   ├── Board.tsx               # react-chessboard wrapper + game-over modal
+│   │   ├── MoveList.tsx            # Mainline + variation display
+│   │   ├── CoachPanel.tsx          # Badge + motifs + explanation + "Try this move"
+│   │   ├── StackPanel.tsx          # Exploration stack with mini-boards
+│   │   ├── MiniBoard.tsx           # Small board preview with highlights
+│   │   ├── NavShell.tsx            # Top nav + LLM badge
+│   │   ├── JourneyCard.tsx         # Level progress + sparkline
+│   │   ├── WeaknessDashboard.tsx   # Top motifs + phase breakdown
+│   │   ├── PromotionBanner.tsx     # Level-up celebration
+│   │   ├── PracticePrompt.tsx      # Post-game review CTA
+│   │   └── boardAssets.tsx         # Chess piece SVGs
 │   │
 │   ├── engine/
-│   │   ├── stockfishWorker.ts      # web worker bootstrap
+│   │   ├── stockfishWorker.ts      # Web Worker bootstrap
 │   │   └── analysis.ts             # analyzePosition(fen) API
 │   │
 │   ├── game/
-│   │   ├── gameTree.ts             # MoveNode tree + operations
+│   │   ├── gameTree.ts             # MoveNode tree + stack-of-forks operations
 │   │   ├── gameStore.ts            # Zustand store for active game
+│   │   ├── gameStorage.ts          # IndexedDB persistence (save/load/list)
 │   │   ├── moveClassifier.ts       # cpLoss → quality
-│   │   └── pgn.ts                  # export with variations
+│   │   └── pgn.ts                  # PGN export
 │   │
 │   ├── coach/
-│   │   ├── coachClient.ts          # decides LLM vs. fallback
-│   │   ├── templates.ts            # hand-authored fallback prose
-│   │   ├── motifPhrases.ts         # short per-motif snippets
+│   │   ├── coachClient.ts          # LLM-first with template fallback
+│   │   ├── templates.ts            # Hand-authored fallback prose
+│   │   ├── motifPhrases.ts         # Short per-motif snippets
 │   │   └── types.ts                # CoachRequest / CoachResponse
 │   │
 │   ├── tagging/
-│   │   ├── motifs.ts               # fixed motif vocabulary
+│   │   ├── motifs.ts               # Fixed motif vocabulary
 │   │   ├── ruleDetectors.ts        # hanging piece, fork, pin, etc.
 │   │   ├── phaseDetector.ts        # opening/middle/endgame
 │   │   ├── ecoLookup.ts            # FEN → opening code
-│   │   └── tagMove.ts              # orchestrator
+│   │   └── tagMove.ts              # Orchestrator: rules + optional LLM
 │   │
 │   ├── profile/
 │   │   ├── profileStore.ts         # Zustand + localforage persistence
-│   │   ├── profileAggregates.ts    # rollups with exponential recency decay
-│   │   ├── weaknessSelector.ts     # top-N weaknesses for prompt/selection
-│   │   └── types.ts
+│   │   ├── profileAggregates.ts    # Rollups with exponential recency decay
+│   │   ├── weaknessSelector.ts     # Top-N weaknesses for prompt/selection
+│   │   └── types.ts                # PlayerProfile, JourneyState, etc.
 │   │
 │   ├── srs/
 │   │   ├── scheduler.ts            # SM-2 implementation
-│   │   ├── practiceStore.ts        # due cards, results
-│   │   └── types.ts
+│   │   ├── practiceStore.ts        # Due cards, results, Zustand
+│   │   └── types.ts                # PracticeCard
+│   │
+│   ├── auth/
+│   │   └── authStore.ts            # Supabase session, OTP, sign-in/out
 │   │
 │   ├── sync/
-│   │   ├── supabaseClient.ts       # anon-key browser client
-│   │   ├── remoteGameStore.ts      # logged-in users: games go here
-│   │   ├── remoteProfileStore.ts   # logged-in users: profile + events
-│   │   └── migrateAnonymous.ts     # one-shot local → server upload on login
+│   │   ├── supabaseClient.ts       # Browser anon-key client
+│   │   ├── syncOrchestrator.ts     # Central sign-in/out coordinator
+│   │   ├── remoteProfileStore.ts   # Supabase CRUD for profiles + events
+│   │   ├── remoteGameStore.ts      # Supabase CRUD for games
+│   │   ├── remotePracticeStore.ts  # Supabase CRUD for SRS cards
+│   │   ├── remoteByokStore.ts      # Supabase CRUD for BYOK keys
+│   │   └── migrateAnonymous.ts     # One-shot local → server upload on login
 │   │
 │   └── lib/
-│       ├── featureFlags.ts         # LLM mode detection, feature toggles
-│       ├── byokStorage.ts          # read/write the user's API key in IndexedDB
-│       ├── anonId.ts               # stable UUID for anonymous device
-│       ├── branchLimit.ts          # countExplorationBranches(tree)
-│       └── hash.ts                 # sha256 for cache keys
+│       ├── rating.ts               # ACPL → Elo conversion + level definitions
+│       ├── journey.ts              # Progression logic: progress, promotion, rolling rating
+│       ├── featureFlags.ts         # LLM mode detection + BYOK header injection
+│       ├── byokStorage.ts          # Read/write BYOK key in IndexedDB
+│       ├── branchLimit.ts          # Anonymous branch cap
+│       ├── anonId.ts               # Stable UUID for anonymous device
+│       └── moveSound.ts            # Move/capture audio
 │
 └── api/                            # Vercel serverless functions (Node 20)
     ├── health.ts                   # GET — returns { llmMode }
     ├── explain-move.ts             # POST — Claude coaching proxy
     ├── tag-move.ts                 # POST — Claude motif tagger
-    ├── migrate-anonymous.ts        # POST — server-side transaction for login migration
+    ├── migrate-anonymous.ts        # POST — server-side migration transaction
     └── _lib/
-        ├── anthropicClient.ts      # builds a one-shot client from byok header or env
-        ├── cache.ts                # module-level lru-cache instance
-        ├── supabaseAdmin.ts        # service-role client (admin ops only)
+        ├── anthropicClient.ts      # Builds ephemeral client from BYOK header
+        ├── cache.ts                # Module-level lru-cache instance
         └── prompts/
             ├── explain.ts
             └── tag.ts
 ```
 
-**Why this layout:** the root is a single Vite app, so `npm run dev` just works. Vercel detects `api/` and deploys every file there as a serverless function automatically. No monorepo, no workspaces, no multi-package coordination. (Phase 1 started as a `frontend/` workspace; Phase 1.5 flattens it — see §12c.)
-
 ### 3a. Screens & Navigation
-
-altmove is not just a game page — it's a small multi-page app. All routes are client-side except auth callbacks.
 
 | Route | Page | Auth | Purpose |
 |---|---|---|---|
-| `/` | `HomePage` | optional | Landing: "Play now" CTA, feature pitch, links to library/dashboard |
-| `/play` | `PlayPage` | optional | Live game vs Stockfish + coach panel + fork UI |
-| `/play/:gameId` | `PlayPage` | optional | Resume a specific saved game (local for anon, Supabase for logged-in) |
-| `/library` | `LibraryPage` | optional | Saved games list; click to open in read-only review or resume |
-| `/library/:gameId` | `GameReviewPage` | optional | Read-only PGN replay with coach comments and evals |
-| `/dashboard` | `DashboardPage` | optional | Weakness profile charts: top motifs, ACPL, phase breakdown |
-| `/mistakes` | `MistakesPage` | optional | Flat list of `WeaknessEvent`s with filters (motif, phase, opening) |
-| `/practice` | `PracticePage` | optional | SRS drill runner; cards sourced from the profile |
-| `/profile` | `ProfilePage` | logged-in | Account info, stats rollup, sign out |
-| `/settings` | `SettingsPage` | optional | BYOK key input, engine depth/skill, coaching verbosity, data export/clear |
-| `/login` | `LoginPage` | no | Email magic link via Supabase Auth |
-| `/onboarding` | `OnboardingPage` | logged-in | One-time welcome + local → server migration prompt |
-| `/privacy` | `PrivacyPage` | no | Privacy policy |
-| `/terms` | `TermsPage` | no | Terms of service |
+| `/` | `HomePage` | optional | Landing: hero + feature cards (anon), greeting + journey ladder + progress (logged in) |
+| `/play` | `PlayPage` | optional | Live game vs Stockfish + coach panel + explorations |
+| `/library` | `LibraryPage` | optional | Saved games list with search, date, and result filters |
+| `/library/:gameId` | `GameReviewPage` | optional | Read-only mainline replay with coach comments and mistakes |
+| `/mistakes` | `MistakesPage` | optional | Flat list of WeaknessEvents with motif + phase filters |
+| `/practice` | `PracticePage` | optional | SRS drill runner; cards sourced from the player's own mistakes |
+| `/profile` | `ProfilePage` | optional | Stats, rating graph, weakness dashboard, motif breakdown |
+| `/settings` | `SettingsPage` | optional | BYOK key input, display name, data management |
+| `/login` | `LoginPage` | no | Email OTP via Supabase Auth |
+| `/onboarding` | `OnboardingPage` | logged-in | Display name + local → server migration prompt |
 
-**Anonymous users** see every page except `/profile` and `/onboarding`; their data lives in IndexedDB and is stamped with a client-generated UUID (`lib/anonId.ts`). Logging in triggers a one-shot `POST /api/migrate-anonymous` that transfers everything under their new user id (§12a).
-
-`NavShell.tsx` wraps every page and renders: logo → Play / Library / Dashboard / Practice / Settings → LLM mode badge → account menu. Auth-gated pages redirect to `/login` with a `?next=` query param.
+`NavShell.tsx` wraps every page and renders: logo → Play / Library / Mistakes / Practice → LLM mode badge → account menu.
 
 ---
 
 ## 4. Core Data Model
 
-### 4.1 Game tree (for forking)
+### 4.1 Game tree (stack-of-forks)
+
+The game tree uses a **stack-of-forks** model where explorations are frames pushed onto a stack. The mainline (frame 0) is permanent; exploration frames can be pushed and popped destructively.
 
 ```ts
-type MoveQuality =
-  | 'best'
-  | 'excellent'
-  | 'good'
-  | 'inaccuracy'
-  | 'mistake'
-  | 'blunder'
-  | 'book';
-
 interface MoveNode {
-  id: string;                    // uuid
-  parentId: string | null;       // null only for the root
+  id: string;
+  parentId: string | null;
   move: string | null;           // SAN; null for root
+  uci: string | null;            // UCI notation (e.g. "g1f3")
   fen: string;                   // position AFTER this move
-  evalCp: number | null;         // centipawn eval from white's perspective
+  moverColor: 'w' | 'b';
+  evalCp: number | null;         // centipawn eval (white perspective)
   mate: number | null;           // mate-in-N if applicable
-  quality?: MoveQuality;
-  coachComment?: string;         // filled by LLM or template
-  coachSource?: 'llm' | 'template';
-  motifs?: string[];             // from tagging pipeline
-  childrenIds: string[];         // first child = mainline continuation
-  isExploration: boolean;        // true if inside a fork
+  bestMoveBeforeUci: string | null;
+  quality: MoveQuality | null;
+  motifs: string[];
+  coachText: string | null;
+  coachSource: 'llm' | 'template' | null;
+  cpLoss: number | null;
+  childrenIds: string[];
 }
 
-interface GameState {
+interface StackFrame {
   id: string;
-  nodes: Map<string, MoveNode>;
+  index: number;                 // 0 = mainline
+  parentFrameId: string | null;
+  forkPointNodeId: string | null;
+  nodeIds: string[];
+  label: string;
+}
+
+interface GameTree {
+  id: string;
   rootId: string;
-  currentNodeId: string;           // where the board is currently rendered
-  mainGameHeadId: string;          // tip of the real game (Return jumps here)
-  explorationRootId: string | null; // set while in a fork
-  result?: '1-0' | '0-1' | '1/2-1/2';
+  currentNodeId: string;
+  mainGameHeadId: string;        // tip of frame 0 — the "real game"
+  stackFrames: StackFrame[];
+  currentFrameId: string;
+  result: '1-0' | '0-1' | '1/2-1/2' | null;
   startedAt: number;
+  nodes: Map<string, MoveNode>;
 }
 ```
 
 **Invariants:**
-- The main game is a single path from root to `mainGameHeadId`. Along this path every node has `isExploration = false`.
-- Exploration subtrees are rooted at a sibling of a main-game node; every node inside has `isExploration = true`.
-- `currentNodeId` is the only source of truth for which position the board renders.
-- Nothing is ever deleted — variations accumulate.
+- The mainline is frame 0. `mainGameHeadId` is updated only when extending frame 0.
+- Exploration frames are created by `pushFrame()` and removed by `popToFrameId()`.
+- `currentNodeId` determines which position the board renders (can be on any frame).
+- Game completion checks both the mainline head and the current node — a game-over on any branch finishes the entire game.
+- `tree.result` is the authoritative game-level result. Once set, no moves are allowed on any frame.
 
-### 4.2 Player profile (for adaptive coaching)
+### 4.2 Player profile
 
 ```ts
-interface WeaknessEvent {
-  id: string;
-  gameId: string;
-  moveNumber: number;
-  fen: string;                   // position BEFORE the mistake
-  playerMove: string;            // SAN
-  bestMove: string;              // SAN
-  cpLoss: number;
-  quality: MoveQuality;          // always inaccuracy | mistake | blunder
-  phase: 'opening' | 'middlegame' | 'endgame';
-  motifs: string[];
-  eco?: string;
-  color: 'white' | 'black';
-  timestamp: number;
+interface JourneyState {
+  displayName?: string;
+  calibrationGamesPlayed: number;
+  calibrated: boolean;
+  currentLevel: string;
+  levelProgress: number;           // 0-100 (capped at 99 if promotion blocked)
+  rollingRating: number;
+  gamesAtCurrentLevel: number;
+  reviewCreditsToday: number;
+  reviewCreditDate: string;
+  promotionHistory: Array<{ level: string; timestamp: number }>;
+  lastPromotionDismissed: boolean;
 }
 
 interface PlayerProfile {
   totalGames: number;
   totalMoves: number;
-  weaknessEvents: WeaknessEvent[];   // append-only log
-  motifCounts: Record<
-    string,
-    { count: number; decayedCount: number; cpLossTotal: number; lastSeen: number }
-  >;
+  weaknessEvents: WeaknessEvent[];
+  motifCounts: Record<string, MotifCounter>;
   phaseCpLoss: { opening: number; middlegame: number; endgame: number };
-  openingWeaknesses: Record<string, { games: number; avgCpLoss: number }>;
-  acplHistory: { timestamp: number; acpl: number }[];
+  openingWeaknesses: Record<string, OpeningStat>;
+  acplHistory: AcplHistoryEntry[];
+  journeyState: JourneyState;
   createdAt: number;
   updatedAt: number;
 }
 ```
 
-Aggregates use **exponential recency decay** so old events fade:
-```
-decayedCount = Σ exp(-(now - event.timestamp) / HALFLIFE_MS)
-```
-This makes the weakness profile reflect *current* weaknesses, not lifetime ones.
+Aggregates use **exponential recency decay** (`HALFLIFE_MS = 14 days`) so old events fade and the weakness profile reflects *current* weaknesses.
 
 ### 4.3 SRS practice
 
 ```ts
 interface PracticeCard {
   id: string;
-  eventId: string;               // link back to the WeaknessEvent
-  fen: string;                   // position BEFORE the player's move
+  eventId: string;
+  gameId: string;
+  fen: string;
   bestMove: string;              // SAN — the answer
+  playerMove: string;
   motifs: string[];
+  quality: string;
+  moveNumber: number;
   easeFactor: number;            // SM-2
   intervalDays: number;
+  repetitions: number;
   dueAt: number;
-  lapses: number;
+  lastReview: number;
 }
 ```
 
@@ -308,91 +305,28 @@ cpLoss ≤ 200  → mistake
 cpLoss > 200  → blunder
 ```
 
-Where `cpLoss = evalBeforeMove − evalAfterMove`, normalized to the moving side's perspective.
+Where `cpLoss = evalBefore − evalAfter`, normalized to the moving side's perspective.
 
 Special cases:
-- Positions with only one legal move skip classification.
 - A move that loses a forced mate is always `blunder`.
-- Moves matched against an ECO opening book are labeled `book` (Phase 12 polish).
+- Moves matched against an ECO opening book are labeled `book`.
+- Brilliant and great classifications exist for moves that find the only good move in complex positions.
 
 ---
 
 ## 6. LLM-Optional Contract
 
-This is the architectural backbone that makes the LLM truly optional.
+The coach pipeline is designed so the LLM is never in the critical path:
 
-```ts
-// lib/featureFlags.ts
-// Probes GET /api/health once on startup with a short timeout, and
-// also reads the current BYOK key from IndexedDB. Returns the effective mode.
-type LlmMode = 'off' | 'byok-only' | 'free-tier';
-async function getLlmMode(): Promise<LlmMode>;
-function hasLLM(): boolean;   // true when byok-only (with key) or free-tier available
-
-// coach/types.ts
-interface CoachRequest {
-  fenBefore: string;
-  playerMove: string;
-  bestMove: string;
-  pv: string[];
-  quality: MoveQuality;
-  cpLoss: number;
-  motifs: string[];
-  profileSummary?: ProfileSummary;   // injected for personalization
-}
-
-interface CoachResponse {
-  text: string;
-  source: 'llm' | 'template';
-}
-
-// coach/coachClient.ts
-async function getCoachExplanation(req: CoachRequest): Promise<CoachResponse> {
-  if (hasLLM()) {
-    try {
-      const res = await fetch('/api/explain-move', {
-        method: 'POST',
-        headers: withByokHeader({ 'content-type': 'application/json' }),
-        body: JSON.stringify(req),
-      });
-      if (res.ok) {
-        const { explanation } = await res.json();
-        return { text: explanation, source: 'llm' };
-      }
-    } catch {
-      // fall through to template on any failure
-    }
-  }
-  return { text: renderTemplate(req), source: 'template' };
-}
-```
-
-The same pattern applies to tagging:
-
-```ts
-// tagging/tagMove.ts
-async function tagMove(ctx: TagContext): Promise<string[]> {
-  const ruleTags = runRuleDetectors(ctx);           // always runs
-  if (ctx.quality === 'best' || ctx.quality === 'good') return ruleTags;
-  if (!hasLLM()) return ruleTags;
-  try {
-    const { motifs } = await fetch('/api/tag-move', {
-      method: 'POST',
-      headers: withByokHeader({ 'content-type': 'application/json' }),
-      body: JSON.stringify(ctx),
-    }).then(r => r.json());
-    return dedupe([...ruleTags, ...motifs]);        // LLM augments, never replaces
-  } catch {
-    return ruleTags;
-  }
-}
-```
+1. `featureFlags.ts` probes `GET /api/health` on startup (800ms timeout). Also reads the BYOK key from IndexedDB.
+2. `coachClient.ts` attempts Claude via `POST /api/explain-move` with `X-User-API-Key` header.
+3. On any failure (timeout, 401, network error), silently falls back to `templates.ts` hand-authored prose.
+4. `tagMove.ts` runs rule detectors always; augments with LLM tags when available.
 
 **Key properties:**
-- LLM is never in the game's hot path — explanations arrive asynchronously.
-- Any LLM failure silently falls back to templates/rules. No user-visible error.
-- A header badge displays the current mode (`LLM: off` / `LLM: byok`).
-- In BYOK mode the key is read from IndexedDB and sent as `X-User-API-Key` on every LLM call. The server uses it for that one request and forgets it. It is never logged, never persisted server-side, and never sent to any origin except `/api/*` (same-origin).
+- LLM calls are concurrent with engine analysis and never block move playback.
+- A header badge in `NavShell` displays the current mode (`LLM: off` / `LLM: byok`).
+- In BYOK mode the key is stored in IndexedDB locally and in Supabase's `byok_keys` table for cross-device persistence. It is sent as `X-User-API-Key` on each LLM call and never logged or persisted by the server.
 
 ---
 
@@ -400,48 +334,57 @@ async function tagMove(ctx: TagContext): Promise<string[]> {
 
 Implemented in `src/tagging/ruleDetectors.ts`. Each is a pure function over `(fenBefore, playerMove, bestMove, pv, chessInstance)`.
 
-**Phase 3 initial set:**
-1. `hanging_piece` — opponent's best reply after the player's move captures an undefended piece.
-2. `missed_capture` — a free piece existed before the move and wasn't taken.
-3. `missed_fork` — `bestMove` attacks 2+ valuable targets; `playerMove` doesn't.
-4. `back_rank_weakness` — king on back rank with no luft; `bestMove` exploits/defends.
-5. `missed_mate` — `bestMove` has `mate > 0`, `playerMove` doesn't.
+| Motif | Detection |
+|---|---|
+| `hanging_piece` | Opponent's best reply after the player's move captures an undefended piece |
+| `missed_capture` | A free piece existed before the move and wasn't taken |
+| `missed_fork` | `bestMove` attacks 2+ valuable targets; `playerMove` doesn't |
+| `missed_pin` | Engine's best move exploits or creates a pin the player missed |
+| `missed_skewer` | Engine's best move exploits a skewer opportunity |
+| `missed_mate` | `bestMove` has `mate > 0`; `playerMove` doesn't |
+| `back_rank_weakness` | King on back rank with no luft; `bestMove` exploits/defends |
+| `king_safety_drop` | Move weakens king safety significantly |
+| `overloaded_defender` | A piece defending multiple targets can't handle them all |
+| `trade_into_bad_endgame` | Exchange leads to a losing endgame structure |
 
-**Later additions (Phase 12 polish):**
-- `missed_pin`, `missed_skewer`, `overloaded_defender`, `king_safety_drop`, `trade_into_bad_endgame`.
-
-**Vocabulary is versioned.** `src/tagging/motifs.ts` exports `MOTIF_VOCAB_VERSION` — any change bumps it and historical aggregates can be recomputed from the event log.
+Vocabulary is versioned via `MOTIF_VOCAB_VERSION` in `src/tagging/motifs.ts`.
 
 ---
 
 ## 8. Per-Move Flow
 
-Same in both modes. LLM calls are concurrent with engine analysis and never block move playback.
-
 1. User drops a piece → `chess.js` validates.
-2. New `MoveNode` inserted; `currentNodeId` updated; move list re-renders immediately.
-3. Stockfish analyzes the new position → `{ evalAfter, bestMove, pv, mate }`.
-4. `moveClassifier` computes `cpLoss` and assigns `quality`.
-5. `tagMove(ctx)` runs → motifs attached to the node.
-6. If `quality ∈ {inaccuracy, mistake, blunder}`:
+2. New `MoveNode` inserted into the tree; `currentNodeId` updated; board re-renders immediately.
+3. If the move is at a non-tip position, a new exploration frame is pushed (subject to branch cap for anonymous users).
+4. Stockfish analyzes the new position → `{ evalAfter, bestMove, pv, mate }`.
+5. `moveClassifier` computes `cpLoss` and assigns `quality`.
+6. `tagMove(ctx)` runs → motifs attached to the node.
+7. If `quality ∈ {inaccuracy, mistake, blunder}`:
    - A `WeaknessEvent` is appended to `profileStore`.
+   - A `PracticeCard` is created in `practiceStore`.
    - Aggregates are recomputed (debounced).
-7. `getCoachExplanation(req)` — returns LLM prose or a template; stored on the node and rendered in `CoachPanel`.
-8. Engine plays its reply at the configured skill level. Loop.
+8. `getCoachExplanation(req)` — returns LLM prose or a template; stored on the node and rendered in `CoachPanel`.
+9. Game completion check: if the mainline head or current node is game-over, the game is marked finished — `tree.result` is set, ACPL is recorded, journey state is updated, game is persisted with `finishedAt`.
+10. Engine plays its reply at the configured skill level. Loop.
 
 ---
 
-## 9. Fork Flow — "Try This Line"
+## 9. Exploration Flow — "Try This Move"
 
-1. User clicks **"Try `bestMove` instead"** in the `CoachPanel`.
-2. Before forking, `gameStore.tryThisLine()` calls `countExplorationBranches(tree)`. If the viewer is anonymous **and** the count is already `≥ MAX_ANON_BRANCHES` (§12b), the button shows a toast ("Log in to keep exploring — anonymous users get 3 branches per game") and the fork is refused.
-3. Otherwise `gameStore` finds the **parent** of the current node (position before the mistake).
-4. A new `MoveNode` is inserted as a second child of that parent with the engine's best move and `isExploration = true`.
-5. `currentNodeId` → new node; `explorationRootId` → new node.
-6. A yellow `ForkBanner` appears with a **Return to main game** button.
-7. Player continues. Every move inherits `isExploration = true`. Full coaching runs in the fork.
-8. **Return** sets `currentNodeId = mainGameHeadId` and clears `explorationRootId`. The fork subtree stays in the tree and is visible in `MoveList`.
-9. Nested forks are allowed — each still counts as one branch from its root in the anon-limit accounting.
+1. User clicks **"Try this move"** in `CoachPanel` (only shown for inaccuracy/mistake/blunder, hidden when game is finished).
+2. `gameStore.tryThisLine()` checks the branch cap. If anonymous and at the limit (2 branches), `branchCapReached` flag is set and an amber banner appears on the play page.
+3. Otherwise, the store finds the **parent** of the current node (position before the mistake).
+4. A new `MoveNode` is inserted as a child of that parent with the engine's best move.
+5. A new `StackFrame` is pushed onto the stack.
+6. `currentNodeId` and `currentFrameId` point to the new frame.
+7. Player continues playing in the branch. Full coaching runs in the fork.
+8. **StackPanel** shows all frames with mini-board previews. Branch frames show the fork position with red highlights (wrong move) and green highlights (alternate move).
+9. Clicking any frame in the StackPanel pops back to it. "Back to your game" returns to the mainline.
+10. Nested exploration is allowed — each push adds a frame to the stack.
+
+### Branch limits
+
+Anonymous users are capped at 2 exploration frames above the mainline (`MAX_ANON_BRANCHES = 2`). When the cap is reached, an amber banner appears with a link to sign in. Authenticated users have unlimited branches. The cap is enforced in three places: `makeMove` (when branching off a non-tip position), `tryThisLine`, and engine auto-play.
 
 ---
 
@@ -455,530 +398,242 @@ Same in both modes. LLM calls are concurrent with engine analysis and never bloc
 - `openingWeaknesses[eco]` = games + avg cpLoss per opening.
 - `acplHistory` appended once per finished game.
 
-**`getTopWeaknesses(profile, n)`** → top `n` motifs by `decayedCount`, filtered to `count >= MIN_COUNT`.
+**`getTopWeaknesses(profile, n)`** → top `n` motifs by `decayedCount`.
 
-**Adaptive coaching uses the profile in two ways:**
-
-1. **Prioritization (both modes).** When a move's motifs intersect `topWeaknesses`, the coach panel expands and draws more attention. Motifs the player has mastered (high lifetime count, zero recent) are suppressed to avoid nagging.
-
-2. **Personalization.**
-   - **LLM mode:** `profileSummary` is injected into the explain prompt. Example:
-     > "The student's top recurring weaknesses: (1) hanging pieces (9/20 recent games), (2) missed knight forks, (3) poor king safety in the Sicilian as black. If this move relates to any of these, explicitly connect the feedback to the pattern."
-   - **Template mode:** `renderTemplate` is passed the top weaknesses and prefers templates whose `motifs` field matches. Templates can also include an optional `reinforcementSuffix` such as *"This is the 3rd time this week — keep practicing."* which is appended when `count >= 3` for that motif.
-
-**Dashboard (`DashboardPage.tsx` + `WeaknessDashboard.tsx`):** top motifs bar chart, ACPL over time, phase breakdown, and "retired weaknesses" (motifs whose decayed count has dropped below threshold).
+**Adaptive coaching:**
+- **LLM mode:** `profileSummary` is injected into the explain prompt. The LLM connects feedback to recurring patterns.
+- **Template mode:** `renderTemplate` prefers templates whose motifs match top weaknesses. A `reinforcementSuffix` is appended when `decayedCount ≥ 3`.
 
 ---
 
-## 11. Spaced-Repetition Practice (No LLM Required)
+## 11. Spaced-Repetition Practice
 
-`src/srs/scheduler.ts` implements SM-2. Every `WeaknessEvent` spawns a `PracticeCard` that lives in `practiceStore` (localforage for anon, Supabase table for logged-in).
+`src/srs/scheduler.ts` implements SM-2. Every `WeaknessEvent` spawns a `PracticeCard`.
 
 **Flow:**
-- At session start, `getDueCards(limit)` returns the cards due today.
-- `PracticeDrawer.tsx` shows one card at a time: the board renders `card.fen`, the player drags their answer.
-- Compare against `card.bestMove`:
-  - Correct → SM-2 bumps `intervalDays` and `easeFactor`, updates `dueAt`.
-  - Incorrect → `intervalDays = 1`, `easeFactor` reduced, `lapses++`.
-- Results persisted to `practiceStore`.
-
-This system needs no LLM and no backend logic beyond persistence. It is entirely deterministic and works offline.
+- `PracticePage` presents due cards one at a time: the board renders `card.fen`, the player drags their answer.
+- Correct → SM-2 bumps `intervalDays` and `easeFactor`.
+- Incorrect → `intervalDays` resets, `easeFactor` reduced.
+- Reviewing a mistake from the Mistakes page credits journey progress (max 3/day).
 
 ---
 
-## 12. Server Surface (Optional — BYOK proxy + sync)
+## 12. Player Journey & Progression
 
-**Always-mounted function:**
-- `GET /api/health` → `{ llmMode: 'off' | 'byok-only' | 'free-tier' }`
+### 12.1 Overview
 
-**BYOK-gated functions:**
-- `POST /api/explain-move` — validates the `X-User-API-Key` header, builds an ephemeral `@anthropic-ai/sdk` client, calls `claude-sonnet-4-5-20250929` with max 300 tokens, returns `{ explanation }`. Cache key = `sha256(fen + move + profileHash)`. Cache is module-level `lru-cache` per warm function instance.
-- `POST /api/tag-move` — same pattern, constrained JSON output over the fixed motif vocabulary, cache key = `sha256(fen + move)`.
+The journey system provides structured progression through six levels. **Exclusively available to authenticated users.** Anonymous users see the generic homepage; logging in unlocks the full journey experience. Everyone starts at Newcomer.
 
-**Auth/sync functions:**
-- `POST /api/migrate-anonymous` — service-role Supabase call that moves rows for an anonymous device UUID over to a freshly-authenticated user id in a single transaction. Called once on first login.
+### 12.2 Level Definitions
 
-**Frontend probe:** `getLlmMode()` calls `GET /api/health` once on startup with a ~500 ms timeout. On failure, mode is forced to `off` for the session.
+| Level | Elo Range | Stockfish Skill | Auto Skill | Focus Motifs |
+|---|---|---|---|---|
+| **Newcomer** | < 900 | 1-4 | 3 | `hanging_piece`, `missed_capture` |
+| **Learner** | 900 - 1199 | 5-8 | 7 | `missed_fork`, `missed_pin` |
+| **Club Player** | 1200 - 1499 | 9-11 | 10 | `king_safety_drop`, `back_rank_weakness` |
+| **Competitor** | 1500 - 1799 | 12-15 | 14 | `missed_skewer`, `overloaded_defender` |
+| **Advanced Thinker** | 1800 - 2199 | 16-18 | 17 | `trade_into_bad_endgame`, `missed_mate` |
+| **Expert** | 2200+ | 19-20 | 20 | All motifs |
 
-### 12a. Public Hosting Architecture
+**Auto Skill** = Stockfish automatically adjusts to the midpoint of the level's skill range on sign-in hydration and on promotion. The player can still manually override in game settings.
 
-**Topology:**
-```
-            ┌────────────────────────────────────────┐
-            │  Vercel edge (single deployment)        │
-            │                                         │
-  Browser ──┤   /                  → static Vite build│
-            │   /play, /dashboard  → static Vite build│
-            │   /api/*             → Node 20 functions│
-            │                                         │
-            └──────────┬────────────┬─────────────────┘
-                       │            │
-                       │            └──── Anthropic API
-                       │                  (ephemeral client,
-                       │                   key from BYOK header
-                       │                   or server env)
-                       ▼
-               ┌───────────────┐
-               │   Supabase    │
-               │  • Auth (JWT) │
-               │  • Postgres   │
-               │  • RLS        │
-               └───────────────┘
-```
+### 12.3 Rolling Rating
 
-**Why this shape:**
-- One deployment, one `vercel.json`, one domain. `npm run build` produces a static `dist/`, and anything in `api/` is auto-detected and deployed as a serverless function.
-- The frontend talks to Supabase directly using the **anon** key and `VITE_SUPABASE_URL`. Row-Level Security enforces per-user access — nothing sensitive is proxied through our functions just to reach the DB.
-- The server only exists for things that *must* be server-side: the LLM proxy (so the user's key doesn't live in CORS-hostile client code) and the anonymous-migration transaction (which needs service-role privileges).
+Weighted average of the last 10 games' ACPL→Elo values. More recent games are weighted higher (linearly increasing weights: game 1 = weight 1, game 10 = weight 10). Computed by `computeRollingRating()` in `journey.ts`.
 
-**Supabase schema (Phase 9):**
+### 12.4 Progress & Promotion
+
+Each level has a progress bar from 0% to 100%. Three sources:
+
+1. **Playing games** (+5-15%) — based on how the game's ACPL compares to the level's expected range.
+2. **Reviewing mistakes** (+3-5%) — capped at 3 reviews per day.
+3. **Reducing weaknesses** (+10% bonus) — when a motif's decayed count drops below threshold.
+
+**Promotion requires ALL THREE:**
+1. Progress bar at 100%
+2. Rolling Elo ≥ next level's floor
+3. Minimum 5 games at current level
+
+**99% cap:** When progress reaches 100% but promotion is blocked (not enough games or rating too low), progress is capped at 99% and the UI shows "play N more games to promote" or similar guidance.
+
+**No demotion.** Level titles never drop. If performance declines, the progress bar drains toward 0%, but the player keeps their level.
+
+### 12.5 Game Completion on Branches
+
+When a game reaches checkmate/stalemate/draw on **any** board (mainline or branch), the entire game tree is marked as completed:
+- `tree.result` is set based on the ending position.
+- All boards become read-only (moves blocked everywhere).
+- The game-over modal shows on every board, not just the one where the game ended.
+- ACPL is computed from the mainline for rating/journey updates.
+- Game settings panel hides, "Try this move" hides, resign button hides.
+
+### 12.6 Home Page States
+
+1. **Not logged in** — Generic hero, feature cards, "Play now" CTA. Quick stats shown if games exist locally.
+2. **Logged in** — Personalized greeting with time-of-day, full journey ladder (6 levels with chess piece icons, current level highlighted), progress bar to next level, play CTA.
+
+---
+
+## 13. Auth & Sync
+
+### 13.1 Authentication
+
+Email OTP via Supabase Auth. Flow:
+1. User enters email on `/login`.
+2. `signInWithEmail` sends a magic code.
+3. User enters the 6-digit code.
+4. `verifyOtp` completes authentication.
+5. `onSignIn` callback triggers `hydrateFromRemote` — pulls profile, games, cards, and BYOK key from Supabase.
+
+### 13.2 Onboarding
+
+After first login, users land on `/onboarding`:
+- Asked "What should we call you?" (stored as `journeyState.displayName`).
+- If local anonymous data exists, offered a choice: merge it into their account or start fresh.
+- Migration tracks decisions via IndexedDB claim to prevent re-prompting.
+
+### 13.3 Sign Out
+
+Clears all local state:
+- IndexedDB (profile, games, practice cards via `localforage.clear()`)
+- Zustand stores (profile, game, practice, auth)
+- Local BYOK key cache
+- Anonymous device ID
+
+**Backend data is preserved** — the BYOK key, profile, games, and cards remain in Supabase and are restored on next sign-in.
+
+### 13.4 Sync Architecture
+
+**Local-first with optimistic updates:**
+- All writes go to IndexedDB first, then fire-and-forget push to Supabase.
+- Profile saves are debounced (500ms). Game saves happen after every classified move.
+- On sign-in, full hydration from Supabase overwrites local state.
+- `pushProfileRemote`, `pushGameRemote`, `pushByokKeyRemote` are fire-and-forget exports from `syncOrchestrator.ts`.
+
+### 13.5 BYOK Key Persistence
+
+BYOK API keys have dual storage:
+- **Local:** IndexedDB via `byokStorage.ts` (for immediate use).
+- **Remote:** Supabase `byok_keys` table (for cross-device persistence).
+- On sign-in, the remote key is fetched and written to local cache.
+- On sign-out, only the local copy is cleared; the backend key is preserved.
+- The key is only deleted from the backend when the user explicitly clicks "Remove key" in Settings.
+
+### 13.6 Supabase Schema
+
 ```
 users                 (managed by Supabase Auth)
-profiles              (user_id PK, created_at, motif_counts jsonb, phase_cp_loss jsonb, ...)
-games                 (id PK, owner uuid, started_at, result, pgn, tree jsonb)
-weakness_events       (id PK, user_id, game_id, fen, player_move, best_move, cp_loss, quality, phase, motifs text[], eco, color, ts)
-practice_cards        (id PK, user_id, event_id, fen, best_move, ease_factor, interval_days, due_at, lapses)
-anon_claims           (anon_id uuid, user_id uuid, claimed_at)   -- audit of migrations
+profiles              (user_id PK, total_games, total_moves, motif_counts jsonb,
+                       phase_cp_loss jsonb, opening_weaknesses jsonb,
+                       acpl_history jsonb, journey_state jsonb, ...)
+weakness_events       (id PK, user_id, game_id, fen, player_move, best_move,
+                       cp_loss, quality, phase, motifs text[], eco, color, ts)
+games                 (id PK, user_id, started_at, updated_at, finished_at,
+                       result, mainline_plies, human_color, engine_enabled, tree jsonb)
+practice_cards        (id PK, user_id, event_id, game_id, fen, best_move,
+                       player_move, motifs, quality, ease_factor, interval_days,
+                       repetitions, due_at, last_review)
+byok_keys             (user_id PK, api_key, created_at, updated_at)
 ```
 
-Every table with a `user_id` has an RLS policy of the form `user_id = auth.uid()`. The service-role key (server-only, never shipped) is used only by `api/migrate-anonymous.ts` to rewrite `user_id` on a batch of anon-tagged rows under one transaction.
+Every table with `user_id` has RLS policies: `user_id = auth.uid()`.
 
-**LLM mode table:**
+---
 
-| Mode | Who uses it | Key source | Rate limit |
-|---|---|---|---|
-| `off` | Everyone when `/api/health` reports off | — | — |
-| `byok-only` | **Default.** Users who paste a key in Settings. | `X-User-API-Key` header (read from IndexedDB in browser; discarded after the one request on the server) | Users pay Anthropic directly; no server-side quota |
-| `free-tier` | **Deferred.** Would use server env `ANTHROPIC_API_KEY` and enforce `FREE_TIER_DAILY_CAP_CENTS` per user | Server env | Would require a persistent counter — not implemented yet |
+## 14. Game Library
 
-`free-tier` is a named mode in code (`getLlmMode()` can return it) but it is never active in the v1 deployment. Turning it on later is a matter of adding a Supabase `usage_counters` table and an admission check in `api/explain-move.ts`. The feature flag path is in place; the implementation is not.
+### Storage
 
-**BYOK data flow:**
-1. User pastes key in `/settings` → stored in IndexedDB via `lib/byokStorage.ts`.
-2. On every coach call, `withByokHeader(h)` adds `X-User-API-Key` to the outgoing fetch.
-3. `api/_lib/anthropicClient.ts` reads the header, constructs a one-shot `new Anthropic({ apiKey: headerKey })`, uses it for the single call, and lets it go out of scope. Logs redact the header.
-4. On 401/403 the server returns `{ error: 'invalid_key' }` and the frontend shows a banner in Settings prompting the user to re-enter their key.
+Games are persisted to IndexedDB via `gameStorage.ts`:
+- **Index key:** `chesster:games:index` → lightweight array of `PersistedGameIndexEntry`.
+- **Game key:** `chesster:game:<id>` → full `PersistedGame` with serialized tree.
+- The tree's `nodes` Map is flattened to an array for serialization and rehydrated on load.
 
-**Security & legal checklist (Phase 11):**
-- HTTPS enforced by Vercel; strict CSP in `vercel.json`.
-- CORS locked to same-origin for all `/api/*`.
-- BYOK key never logged, never persisted server-side, never round-tripped to any non-Anthropic destination.
-- Supabase RLS policies reviewed before go-live.
-- Privacy policy + terms of service pages live.
-- Sentry DSN optional; off by default. When on, BYOK header and full prompts are scrubbed from breadcrumbs.
+### Library Page
 
-**Environment variables:**
+- Lists all saved games sorted by `updatedAt`.
+- Shows result, move count, color, date.
+- In-progress games have a "Resume" button; finished games link to `/library/:gameId`.
+- Search, date range, and result filters.
+- Delete individual games.
+
+### Game Review Page
+
+- Loads a single game by ID and deserializes the tree.
+- Walks the **mainline only** (`walkMainline(tree)`) — branches are not shown.
+- Read-only board with forward/back/start/end navigation and keyboard shortcuts.
+- Displays per-move coach comments and quality badges.
+- Shows game metadata (date, result, color, opponent).
+- Mistakes panel with links to specific positions.
+
+### "Review game" from Game-Over Modal
+
+When a game ends, the game-over modal offers "Review game" which navigates to `/library/:gameId` — the same read-only review experience as clicking a game from the library.
+
+---
+
+## 15. Server Surface
+
+### Always-mounted
+- `GET /api/health` → `{ llmMode: 'off' | 'byok-only' | 'free-tier' }`
+
+### BYOK-gated
+- `POST /api/explain-move` — validates `X-User-API-Key`, calls Claude, returns `{ explanation }`. Cached per `sha256(fen + move + profileHash)`.
+- `POST /api/tag-move` — same pattern, returns motif tags. Cached per `sha256(fen + move)`.
+
+### Auth/sync
+- `POST /api/migrate-anonymous` — service-role Supabase call that migrates anonymous data to authenticated user.
+
+### Environment Variables
 
 | Variable | Where | Required? | Purpose |
 |---|---|---|---|
-| `ANTHROPIC_API_KEY` | Server | No (only if `free-tier` enabled later) | Reserved for the deferred shared-quota mode |
-| `FREE_TIER_DAILY_CAP_CENTS` | Server | No | Reserved; `0` means BYOK-only |
-| `SUPABASE_URL` | Server | Yes | Admin client for migration function |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server | Yes | Admin client only; never exposed |
-| `SENTRY_DSN` | Server | No | Error tracking |
+| `SUPABASE_URL` | Server | Yes | Admin client for migration |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server | Yes | Admin client only |
 | `VITE_SUPABASE_URL` | Client | Yes | Browser Supabase client |
 | `VITE_SUPABASE_ANON_KEY` | Client | Yes | Browser Supabase client (RLS-guarded) |
-| `VITE_SENTRY_DSN` | Client | No | Browser error tracking |
-
-All `VITE_*` vars are baked into the static build. The server-only vars are injected at function runtime.
-
-### 12b. Anonymous Timeline Limits
-
-An **exploration branch** is defined as an `isExploration = true` subtree rooted at a child of a main-line node. Every call to `countExplorationBranches(tree)` walks the tree once and counts these roots; nested forks inside an existing branch do **not** increment the count (they are the same branch from the main game's perspective).
-
-```ts
-// src/lib/branchLimit.ts
-export const MAX_ANON_BRANCHES = 3;
-
-export function countExplorationBranches(tree: GameState): number {
-  let count = 0;
-  for (const id of walkMainline(tree)) {
-    const node = tree.nodes.get(id)!;
-    for (const childId of node.childrenIds) {
-      const child = tree.nodes.get(childId)!;
-      if (child.isExploration) count++;
-    }
-  }
-  return count;
-}
-```
-
-**Enforcement:** `gameStore.tryThisLine()` is the single chokepoint. If the user is anonymous (no Supabase session) **and** `countExplorationBranches(tree) >= MAX_ANON_BRANCHES`, the action is refused with a toast: *"You've used your 3 exploration branches. Log in to keep exploring this game."* Logged-in users have no cap.
-
-**UX:** `MoveList.tsx` shows a small chip next to the game header reading `N/3 branches` for anonymous users. At `N = 3` the chip goes amber.
-
-This is an abuse-surface limit, not a paywall — the rest of the app (playing, coaching, dashboards, drills) is unrestricted for anonymous users.
-
-### 12c. Repository Flattening (Phase 1.5)
-
-Phase 1 scaffolded the app as an npm workspace (`frontend/`) to leave room for a separate Express backend. The v4 architecture uses Vercel serverless functions instead of a separate backend service, so the `frontend/` wrapper is no longer earning its keep. Phase 1.5 flattens it:
-
-- Move every file under `frontend/` up to the repo root.
-- Delete the root `package.json` `workspaces` array and merge `frontend/package.json` into the root.
-- Create `api/` at the root for serverless functions (empty stub files land in Phase 7).
-- Create `vercel.json` with SPA rewrites and function runtime config.
-- Verify `npm run dev`, `npx tsc --noEmit`, and `npm run build` still pass from the root.
-
-No code changes, only file moves and `package.json` merging. This must complete before Phase 2 so Stockfish files land in the final `public/stockfish/` location.
 
 ---
 
-## 13. Feature Parity Table
+## 16. Key Constants
+
+| Constant | Value | Location |
+|---|---|---|
+| `MAX_ANON_BRANCHES` | 2 | `lib/branchLimit.ts` |
+| `MIN_GAMES_FOR_PROMOTION` | 5 | `lib/journey.ts` |
+| `MAX_REVIEW_CREDITS_PER_DAY` | 3 | `lib/journey.ts` |
+| `ROLLING_WINDOW` | 10 games | `lib/journey.ts` |
+| `HALFLIFE_MS` | 14 days | `profile/profileAggregates.ts` |
+| `SAVE_DEBOUNCE_MS` | 500ms | `profile/profileStore.ts` |
+| Default search depth | 14 plies | `engine/analysis.ts` |
+| Health probe timeout | 800ms | `lib/featureFlags.ts` |
+| LLM call timeout | 15s | `coach/coachClient.ts` |
+
+---
+
+## 17. Feature Parity Table
 
 | Feature | LLM off / BYOK not set | LLM on (BYOK key set) |
 |---|---|---|
-| Play vs Stockfish | ✓ | ✓ |
-| Quality badges per move | ✓ | ✓ |
-| Best-move arrow | ✓ | ✓ |
+| Play vs Stockfish | yes | yes |
+| Quality badges per move | yes | yes |
+| Best-move arrow | yes | yes |
 | Coach explanation | Hand-authored template prose | Claude-generated, personalized to profile |
 | Motif tags | Rule detectors | Rule detectors + LLM for fuzzy themes |
-| Fork "try this line" | ✓ (anon capped at 3 branches/game) | ✓ (anon capped at 3 branches/game) |
-| Weakness profile | ✓ (rule-tagged events) | ✓ (richer tags) |
-| Adaptive prioritization | ✓ (template selection biased by profile) | ✓ (templates + prompt-level personalization) |
-| Weakness dashboard | ✓ | ✓ |
-| SRS practice drills | ✓ | ✓ |
-| PGN export | ✓ | ✓ |
-| Runs offline (local dev) | ✓ | ✗ (Claude API required) |
-| Cross-device sync | ✓ when logged in (Supabase) | ✓ when logged in (Supabase) |
-
-The only capability BYOK unlocks is **quality of coach prose**. Everything structural — gameplay, forking, weakness tracking, drills, dashboards, sync — is available to everyone.
+| Fork "try this line" | yes (anon capped at 2) | yes (anon capped at 2) |
+| Weakness profile | yes (rule-tagged events) | yes (richer tags) |
+| Weakness dashboard | yes | yes |
+| SRS practice drills | yes | yes |
+| Game library + review | yes | yes |
+| Player journey | yes (logged-in only) | yes (logged-in only) |
+| Cross-device sync | yes (logged-in) | yes (logged-in) |
+| Runs offline | yes | no (Claude API required) |
 
 ---
 
-## 14. Open Questions
-
-- **Engine depth vs latency.** Do we want separate depths for the opponent's play and the analysis used for coaching?
-- **Stockfish skill levels.** Map Stockfish's `Skill Level` 0–20 to named tiers ("Beginner / Club / Master")?
-- **Streaming coaching.** Worth it for the first version, or defer?
-- **Opening book depth.** How deep should the ECO book extend before we start coaching?
-- **`free-tier` activation.** If we ever want to offer shared LLM, which is the smaller evil: a Supabase `usage_counters` table, or a Cloudflare Worker with a KV store in front of `/api/*`?
-
----
-
-## 15. Build Phases — TODO Checklists
-
-> **How to resume work:** find the first unchecked item in the first phase that isn't fully checked. Each phase is independently deployable.
-
-### Phase 1 — Scaffolding & playable game ✓
-
-- [x] Create `DESIGN.md`
-- [x] Create `README.md`
-- [x] Create root `package.json` (initially with `frontend/` workspace — flattened in Phase 1.5)
-- [x] Create `.gitignore`
-- [x] Scaffold `frontend/` (Vite React TS)
-- [x] Add Tailwind CSS config
-- [x] Install `chess.js`, `react-chessboard`, `zustand`, `uuid`
-- [x] Implement `frontend/src/game/gameStore.ts` (flat move list, no tree yet)
-- [x] Implement `frontend/src/components/Board.tsx`
-- [x] Implement `frontend/src/components/MoveList.tsx`
-- [x] Wire `App.tsx` with a two-pane layout
-- [x] Verify: both sides playable manually in the browser (typecheck + build pass)
-- [ ] Milestone commit
-
-### Phase 1.5 — Repository flattening ✓
-
-- [x] Move every file from `frontend/` up to the repo root
-- [x] Merge `frontend/package.json` into the root `package.json`; remove the `workspaces` field
-- [x] Update `vite.config.ts` (dropped the old Express proxy; dev/prod routing for `api/*` comes from Vercel, not Vite)
-- [x] Create empty `api/` folder (stub files land in later phases)
-- [x] Add `vercel.json` with SPA rewrites + `framework: vite`; pin Node 20 via `engines.node` in `package.json`
-- [x] Verify: `npx tsc --noEmit` and `npm run build` both succeed from the root
-- [ ] Milestone commit
-
-### Phase 2 — Stockfish opponent
-
-- [x] Vendor `stockfish.wasm` + loader into `public/stockfish/` (lite-single variant, 7MB, no COOP/COEP required)
-- [x] Implement `src/engine/stockfishWorker.ts` (Web Worker bootstrap)
-- [x] Implement `src/engine/analysis.ts` with `analyzePosition(fen, {depth})` and UCI parsing
-- [x] Add request queue (promise-chain serialization — one search at a time, staleness via `analysisSeq`)
-- [x] Hook Stockfish as the opponent (configurable skill level, side selection, undo/reset-aware)
-- [x] Implement `src/components/EvalBar.tsx` (tanh squash curve, white-perspective, depth + thinking indicator)
-- [x] Verify: `npx tsc -b` and `npm run build` both succeed from the root
-- [ ] Milestone commit
-
-### Phase 3 — Move classification & rule-based coaching
-
-- [x] Implement `src/game/moveClassifier.ts` (thresholds from §5, mate-sentinel cpLoss, quality labels/colors)
-- [x] Create `src/tagging/motifs.ts` with `MOTIF_VOCAB_VERSION = 1` and fixed vocabulary
-- [x] Implement `src/tagging/phaseDetector.ts` (fullmove + material heuristic)
-- [x] Implement `src/tagging/ruleDetectors.ts` — 5 initial motifs (missed_mate, missed_capture, hanging_piece, missed_fork, back_rank_weakness)
-- [x] Implement `src/tagging/tagMove.ts` (rule-only path, async signature preserved for Phase 7 LLM merge)
-- [x] Install `localforage`
-- [x] Write `src/coach/templates.ts` with 22 hand-authored snippets keyed by `(quality, motif)` with phase-aware generics
-- [x] Write `src/coach/motifPhrases.ts` short per-motif one-liners
-- [x] Implement `src/coach/coachClient.ts` with **template path only** (LLM branch is Phase 7)
-- [x] Implement `src/components/CoachPanel.tsx` (badge + motif chips + text + disabled "Try this line" placeholder)
-- [x] Wire `gameStore` to call classifier → tagger → coach after every player move (engine moves bypass the pipeline, coach state cleared on reset/undo/jump)
-- [x] Verify: `npx tsc -b` and `npm run build` both clean
-- [ ] Milestone commit
-
-### Phase 4 — Game tree & forking
-
-- [x] Refactor `src/game/gameTree.ts` to the full tree model (§4.1)
-- [x] Update `gameStore` to use the tree and track `mainGameHeadId` / `explorationRootId`
-- [x] Implement `src/lib/branchLimit.ts` with `MAX_ANON_BRANCHES` and `countExplorationBranches`
-- [x] Update `MoveList.tsx` to render mainline + indented variations with click-to-jump
-- [x] Add branch-count chip for anonymous users
-- [x] Implement `src/components/ForkBanner.tsx` with "Return to main game"
-- [x] Wire the "Try this line" button in `CoachPanel` to create an exploration branch
-- [x] Enforce anonymous cap in `gameStore.tryThisLine()` (and in `makeMove` when branching off a non-head mainline node)
-- [x] Handle nested forks (sub-branches inside a branch extend the branch; only mainline-rooted branches count toward the anon cap)
-- [x] Verify: `npx tsc -b` and `npm run build` both clean (85 modules, 311.75 kB / 95.64 kB gzipped)
-- [ ] Milestone commit
-
-### Phase 5 — Persistence & weakness profile
-
-- [x] Implement `src/profile/types.ts` (§4.2)
-- [x] Implement `src/profile/profileStore.ts` (Zustand + localforage, debounced save, `hydrate()` + `clearProfile()`)
-- [x] Implement `src/profile/profileAggregates.ts` with exponential decay (`HALFLIFE_MS = 14d`, rolling K=50 phase window)
-- [x] Implement `src/profile/weaknessSelector.ts` (`getTopWeaknesses`, `getRetiredWeaknesses`, `buildProfileSummary`)
-- [x] Hook `gameStore` to append `WeaknessEvent`s on every inaccuracy/mistake/blunder (inside `kickAnalysis` coaching block; `incrementMoves` fires for every classified human move)
-- [x] Update `src/coach/coachClient.ts` to bias template selection by top weaknesses (auto-injects `profileSummary`; `templates.ts` reorders motifs via `biasMotifsByProfile` + appends `reinforcementSuffix` when `decayedCount ≥ 3`)
-- [x] Implement `src/components/WeaknessDashboard.tsx` + `DashboardPage.tsx` (CSS bar graphs + SVG sparkline; reusable as a right-rail widget later)
-- [x] Implement `MistakesPage.tsx` (flat list with motif + phase filters, quality badge, best-move diff)
-- [x] Persist games to localforage (save on game end / on mainline move) — `src/game/gameStorage.ts` + Map↔Array (de)serialization + per-game index; saves opportunistically after classification, after each engine move, and on `reset()`
-- [x] Add router (`react-router-dom`) — `NavShell` + `routes.tsx` + `src/pages/{PlayPage,DashboardPage,MistakesPage}.tsx`; `main.tsx` now wraps `<App />` in `BrowserRouter` and kicks off `profileStore.hydrate()` before first render
-- [ ] Verify: playing multiple games updates the dashboard and coaching prioritization
-- [ ] Milestone commit
-
-### Phase 6 — SRS practice
-
-- [ ] Implement `src/srs/types.ts` and `src/srs/scheduler.ts` (SM-2)
-- [ ] Implement `src/srs/practiceStore.ts` (localforage)
-- [ ] Auto-convert new `WeaknessEvent`s into `PracticeCard`s
-- [ ] Implement `src/components/PracticeDrawer.tsx` + `PracticePage.tsx`
-- [ ] Add "Warm up with drills" prompt at session start
-- [ ] Verify: drills pull from recent blunders and SM-2 scheduling works
-- [ ] Milestone commit
-
-### Phase 7 — BYOK LLM proxy (Vercel functions)
-
-- [ ] Install `@anthropic-ai/sdk`, `lru-cache` at repo root
-- [ ] Implement `src/lib/byokStorage.ts` (IndexedDB-backed key storage)
-- [ ] Add BYOK key input to `SettingsPage.tsx` with validation and clear-key button
-- [ ] Implement `api/_lib/anthropicClient.ts` (ephemeral client from header or env)
-- [ ] Implement `api/_lib/cache.ts` (module-level lru-cache instance)
-- [ ] Implement `api/_lib/prompts/explain.ts` and `api/_lib/prompts/tag.ts`
-- [ ] Implement `api/health.ts` → `{ llmMode }`
-- [ ] Implement `api/explain-move.ts` (BYOK-gated, cached, 300-token cap)
-- [ ] Implement `api/tag-move.ts` (BYOK-gated, JSON schema enforcement)
-- [ ] Implement `src/lib/featureFlags.ts` with `getLlmMode()` + `hasLLM()`
-- [ ] Add LLM mode badge to `NavShell.tsx`
-- [ ] Update `src/coach/coachClient.ts` to try LLM first, fall back on failure, attach `X-User-API-Key`
-- [ ] Update `src/tagging/tagMove.ts` to augment rule tags with LLM tags when available
-- [ ] Inject `profileSummary` into explain requests
-- [ ] Verify: BYOK off → unchanged; setting a key → explanations upgrade live; 401 → banner in settings
-- [ ] Milestone commit
-
-### Phase 8 — Vercel deployment
-
-- [ ] Create Vercel project pointed at the repo
-- [ ] Configure env vars (leave `ANTHROPIC_API_KEY` unset — BYOK-only for v1)
-- [ ] Verify SPA rewrites work for all routes in §3a
-- [ ] Verify `api/*` functions deploy and respond
-- [ ] Smoke-test the public URL end-to-end (anonymous play, fork, dashboard, BYOK)
-- [ ] Milestone commit
-
-### Phase 9 — Supabase auth & sync
-
-- [ ] Create Supabase project; apply schema from §12a
-- [ ] Write RLS policies for every user-scoped table
-- [ ] Install `@supabase/supabase-js`
-- [ ] Implement `src/sync/supabaseClient.ts` (browser anon client)
-- [ ] Implement `LoginPage.tsx` (email magic link)
-- [ ] Implement `src/lib/anonId.ts` (stable device UUID)
-- [ ] Implement `src/sync/remoteGameStore.ts` and `remoteProfileStore.ts`
-- [ ] Route `gameStore` / `profileStore` reads & writes through remote stores when logged in
-- [ ] Implement `api/migrate-anonymous.ts` (service-role transaction)
-- [ ] Implement `src/sync/migrateAnonymous.ts` (client orchestration)
-- [ ] Implement `OnboardingPage.tsx` with migration prompt on first login
-- [ ] Verify: sign up on device A, play a game, log in on device B, see the same game + profile
-- [ ] Milestone commit
-
-### Phase 10 — User-journey pages
-
-- [ ] Install `react-router-dom`, `recharts`, `clsx`, `date-fns`
-- [ ] Implement `src/routes.tsx` and `NavShell.tsx`
-- [ ] Build `HomePage.tsx` (landing + CTA)
-- [ ] Build `LibraryPage.tsx` and `GameReviewPage.tsx`
-- [ ] Build `ProfilePage.tsx`
-- [ ] Wire `SettingsPage.tsx` (engine depth, Stockfish skill, coaching verbosity, LLM override, data export, clear local data)
-- [ ] Verify: all routes in §3a resolve and nav works logged-in and anonymous
-- [ ] Milestone commit
-
-### Phase 11 — Legal, privacy, hardening
-
-- [ ] Write `PrivacyPage.tsx` (data we store, BYOK handling, deletion flow)
-- [ ] Write `TermsPage.tsx`
-- [ ] Add CSP + security headers to `vercel.json`
-- [ ] Audit logs for BYOK redaction
-- [ ] Add data-export and data-delete buttons in `SettingsPage.tsx` (local + Supabase)
-- [ ] Review RLS policies
-- [ ] Optional: wire up Sentry with header scrubbing
-- [ ] Milestone commit
-
-### Phase 12 — Polish
-
-- [ ] Implement `src/game/pgn.ts` (PGN export with variations)
-- [ ] Add best-move arrow overlay on the board
-- [ ] Implement `src/tagging/ecoLookup.ts` and `book` classification for early moves
-- [ ] Add additional motif detectors (pin, skewer, overloaded defender, king safety drop, trade-into-bad-endgame)
-- [ ] Optional: streaming coach responses (LLM mode)
-- [ ] Optional: promotion picker UI (currently auto-queens)
-- [ ] Write `tests/` for moveClassifier, ruleDetectors, gameTree operations, SM-2, branchLimit
-- [ ] Milestone commit
-
----
-
-## 17. Player Journey & Progression
-
-### 17.1 Overview & Auth Gate
-
-The journey system provides a structured progression path that makes improvement visible and encourages consistent play. **It is exclusively available to authenticated users** (`status === 'authenticated'`). Anonymous and unconfigured users see no levels, no progress bars, no calibration UI — they get the generic HomePage hero and feature cards. This is a deliberate retention incentive: the journey is a reason to sign in.
-
-**Reasoning:** Tying progression to auth serves two purposes. First, journey state must persist across devices, which requires a user identity. Second, it creates a natural upgrade path — anonymous users play freely, and when they sign in they unlock a structured learning experience built on top of the same games they've already played.
-
-### 17.2 Calibration Phase
-
-Before assigning a level, the system needs a baseline. New authenticated users play **2 calibration games**. During this phase:
-
-- The Home page shows a journey pitch (the level ladder, what calibration is, a CTA to play).
-- A CalibrationCard shows "Game N of 2 — calibrating your level..." on the Play and Home pages.
-- No rating or level is displayed — reducing pressure on the first games.
-- Stockfish skill starts at 10 (mid-range). After the first calibration game, auto-adjust by +3 or -3 based on whether the player's ACPL was below or above 50 (the ~1400 Elo midpoint). This ensures the second game is at a more appropriate challenge level.
-
-After 2 games, the system computes a **weighted average ACPL** (game 1 weight 1.0, game 2 weight 1.5 — the more recent game matters slightly more), converts it to Elo via `acplToRating()`, and assigns the initial level.
-
-A one-time **reveal card** appears showing the assigned level, its description, focus areas, and what the next level looks like.
-
-**Why 2 games, not 5:** Two games is the minimum for a meaningful baseline while keeping the barrier to entry very low. A 5-game calibration means most casual users never finish it — they churn before seeing any progression UI. Two games can be completed in a single session (15-20 minutes), which means the user sees their level the same day they sign up. The weighting toward the second game compensates for first-game jitters.
-
-### 17.3 Level Definitions
-
-Six levels, each with an Elo anchor, suggested Stockfish skill range, and focus areas drawn from the existing motif vocabulary.
-
-| Level | Elo Range | Stockfish Skill | Focus Motifs | Description |
-|---|---|---|---|---|
-| **Newcomer** | < 900 | 1-4 | `hangingPiece`, `undefendedPiece` | Learning the basics — avoid giving away pieces |
-| **Learner** | 900 - 1199 | 5-8 | `missedFork`, `missedPin` | Building fundamentals — spot simple tactics |
-| **Club Player** | 1200 - 1499 | 9-11 | `kingSafetyDrop`, `pawnStructure` | Solid and improving — develop strategic awareness |
-| **Competitor** | 1500 - 1799 | 12-15 | `missedSkewer`, `overloadedDefender` | Strategically aware — deeper tactics and planning |
-| **Advanced Thinker** | 1800 - 2199 | 16-18 | `badEndgameTrade`, `weakBackRank` | Deep understanding — precision and endgame mastery |
-| **Expert** | 2200+ | 19-20 | All motifs | Elite precision — complex strategy and calculation |
-
-**Why 6 levels instead of 11:** Fewer levels mean each promotion is a meaningful event. With 11 levels, mid-tier players can plateau for weeks between promotions, which kills motivation. Six levels keep the next milestone within reach — the widest Elo band is 400 points (Advanced Thinker), which a consistently improving player can traverse in 20-30 games.
-
-**Why these Elo anchors:** They map directly to the existing `acplToRating()` conversion table. The boundaries (900, 1200, 1500, 1800, 2200) correspond to natural breakpoints in the ACPL→Elo curve where play quality shifts meaningfully.
-
-### 17.4 Multi-Source Progress
-
-Each level has a **progress bar** from 0% to 100%. Three activities contribute progress:
-
-1. **Playing games** (+5-15% per game) — Based on how the game's ACPL compares to the current level's expected range. A game played above the player's level earns more. A game played well below earns less (but never zero — playing always counts).
-
-2. **Reviewing mistakes** (+3-5% per review) — Triggered when a logged-in user opens a game from the Mistakes page (detected via the `?move=` query param). The act of revisiting a mistake and stepping through the position earns credit. Capped at 3 reviews per day to prevent grinding.
-
-3. **Reducing weaknesses** (+10% bonus) — Awarded automatically when a motif's `decayedCount` drops below a threshold (i.e., the player stopped making that type of mistake recently). This hooks into the existing exponential decay system — no new tracking needed.
-
-**Why multi-source:** Single-source progress (play games only) means the only way to engage is a 15-minute game. Multi-source progress lets users advance in 2-minute sessions (review a mistake, check their profile). This dramatically increases session frequency. Duolingo, chess.com, and every high-retention learning app uses this pattern.
-
-**Why no puzzles/drills as a source:** The existing SRS practice system could be wired in later, but the three sources above work entirely with features that already exist in the codebase. No new UI screens needed for the MVP.
-
-### 17.5 Promotion Criteria
-
-To level up, a player must satisfy **both**:
-
-1. **Progress bar at 100%** — earned through the three sources above.
-2. **Rolling Elo ≥ next level's floor** — the weighted average of the last 10 games (or all games if fewer than 10) must meet the threshold. This prevents gaming the progress bar with volume alone.
-
-Additionally: **minimum 5 games at current level** — prevents instant skip-through from lucky calibration.
-
-On promotion:
-- A `PromotionBanner` appears on the Home page showing the new level, what improved, and new focus areas.
-- A suggestion to adjust Stockfish skill is shown (non-blocking).
-- The promotion is recorded in `promotionHistory` for the profile timeline.
-
-**Why a dual gate (progress + Elo):** Progress bar alone rewards quantity. Elo gate alone ignores effort. The combination means you must both put in the work (reviews, consistent play) AND demonstrate the skill. This makes promotions feel earned.
-
-### 17.6 No Demotion
-
-**Level titles never drop.** If performance declines, the progress bar drains toward 0%, but the player keeps their level. This is a deliberate design choice.
-
-**Reasoning:** Demotion is the #1 reason users quit progression systems. A player who reaches Club Player and then has a bad week should not wake up to "You're a Learner again." The progress bar draining is sufficient negative feedback — it communicates "you need to play better to advance" without the psychological damage of losing a title. The player's high-water mark is always preserved.
-
-If the rolling Elo drops significantly below the current level's floor, the progress bar sits at 0% and the journey card shows "Your recent games suggest you're playing below your level — keep practicing to get back on track." This is gentler than demotion and still communicates the situation honestly.
-
-### 17.7 Home Page States (Authenticated Users)
-
-The Home page renders three distinct views based on auth + journey state:
-
-1. **Not logged in** — Generic hero ("Welcome to altmove"), feature pitch, "Play now" CTA, feature cards. No journey UI. This is the current behavior, unchanged.
-
-2. **Logged in, not yet calibrated** — Journey pitch section:
-   - Headline: "Your Chess Journey Starts Here"
-   - Visual level ladder showing all 6 levels with brief descriptions
-   - Explanation of calibration: "Play 2 games and we'll find your starting level"
-   - Prominent CTA: "Play your first game"
-   - If 1 of 2 calibration games is done: "1 more game to go — almost there"
-
-3. **Logged in, calibrated** — Journey dashboard:
-   - JourneyCard at top (level, rating, progress bar, next milestone, focus areas)
-   - PromotionBanner if just promoted (dismissable)
-   - Quick stats (games, moves, rating)
-   - Feature cards
-
-### 17.8 Profile Page Integration
-
-- **Authenticated + calibrated:** JourneyCard rendered at the top of the profile, above the existing stats/trends.
-- **Authenticated + not calibrated:** CalibrationCard shown instead ("Play N more games to unlock your level").
-- **Not authenticated:** No journey UI — existing profile content only.
-
-### 17.9 Data Model
-
-Added to `PlayerProfile`:
-
-```ts
-interface JourneyState {
-  calibrationGamesPlayed: number;    // 0, 1, or 2
-  calibrated: boolean;               // true after 2 games
-  currentLevel: string;              // level key (e.g. 'clubPlayer')
-  levelProgress: number;             // 0-100
-  rollingRating: number;             // weighted avg of last 10 games
-  gamesAtCurrentLevel: number;       // resets on promotion
-  reviewCreditsToday: number;        // caps at 3 per day
-  reviewCreditDate: string;          // ISO date for daily reset
-  promotionHistory: Array<{ level: string; timestamp: number }>;
-  lastPromotionDismissed: boolean;   // user dismissed the banner
-}
-```
-
-Journey state is recomputed from the existing `acplHistory` and `weaknessEvents` arrays whenever a game finishes or a mistake is reviewed. The append-only event log remains the source of truth; journey state is a derived projection.
-
-### 17.10 Implementation Files
-
-**New files:**
-- `src/lib/journey.ts` — Pure functions: `computeRollingRating`, `assignInitialLevel`, `computeLevelProgress`, `checkPromotion`, `drainProgress`, `suggestedSkillRange`, `levelFocusAreas`, `levelMeta`, level constants
-- `src/components/JourneyCard.tsx` — Progress card for Home/Profile
-- `src/components/PromotionBanner.tsx` — Celebration banner
-- `src/components/CalibrationCard.tsx` — "Calibrating..." indicator
-
-**Modified files:**
-- `src/profile/types.ts` — Add `JourneyState` to `PlayerProfile`
-- `src/profile/profileAggregates.ts` — Call journey logic in `recordGameFinished()`
-- `src/profile/profileStore.ts` — Expose journey state, add `dismissPromotion()` and `recordMistakeReview()` actions
-- `src/lib/rating.ts` — Add `ALL_LEVELS`, `ratingForLevel()`, `nextLevel()`
-- `src/pages/HomePage.tsx` — Three-state rendering based on auth + journey
-- `src/pages/ProfilePage.tsx` — JourneyCard / CalibrationCard at top
-- `src/pages/GameReviewPage.tsx` — Call `recordMistakeReview()` on load when `?move=` param is present
-
----
-
-## 16. Setup
-
-See `README.md` for run instructions. Short version:
-
-- **Local dev, no LLM, no Supabase:** `npm install && npm run dev`. Works offline. Games + profile live in IndexedDB.
-- **Local dev with Supabase:** set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local`, then `npm run dev`.
-- **Local dev end-to-end including `/api/*`:** `vercel dev`.
-- **Production:** push to the Vercel-linked branch. Env vars configured in the Vercel dashboard per §12a.
-- **BYOK:** users paste their `ANTHROPIC_API_KEY` in `/settings` after the app loads. Nothing to configure server-side.
+## 18. Setup
+
+- **Local dev, no LLM, no Supabase:** `npm install && npm run dev`. Works offline.
+- **Local dev with Supabase:** set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local`.
+- **BYOK:** users paste their `ANTHROPIC_API_KEY` in `/settings`.
+- **Production:** push to Vercel-linked branch. Env vars in Vercel dashboard.
