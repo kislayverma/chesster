@@ -23,6 +23,10 @@ export interface ProfileSummary {
   topMotifs: string[];
   topWeaknesses: { motif: string; count: number; decayedCount: number }[];
   phaseCpLoss: { opening: number; middlegame: number; endgame: number };
+  /** Total games played (enriches LLM context for summary/narrative). */
+  totalGames?: number;
+  /** Current journey level key (e.g. 'clubPlayer'). */
+  currentLevel?: string;
 }
 
 export interface CoachRequest {

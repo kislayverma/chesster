@@ -86,6 +86,8 @@ export function buildProfileSummary(
       decayedCount: w.decayedCount,
     })),
     phaseCpLoss: profile.phaseCpLoss,
+    totalGames: profile.totalGames,
+    currentLevel: profile.journeyState.currentLevel,
   };
 }
 

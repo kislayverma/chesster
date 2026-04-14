@@ -20,6 +20,11 @@ import { useProfileStore } from '../profile/profileStore';
 import { useAuthStore } from '../auth/authStore';
 import { QUALITY_COLORS, QUALITY_LABELS } from '../game/moveClassifier';
 import { MOTIF_LABELS, type MotifId } from '../tagging/motifs';
+import { computeGameSummary, type GameSummary } from '../game/gameSummary';
+import GameSummaryCard from '../components/GameSummaryCard';
+import EvalChart from '../components/EvalChart';
+import { hasLLM, withByokHeader } from '../lib/featureFlags';
+import { getCurrentProfileSummary } from '../profile/profileStore';
 
 const LAST_MOVE_STYLE: Record<string, string | number> = {
   backgroundColor: 'rgba(255, 255, 0, 0.3)',
@@ -78,6 +83,60 @@ export default function GameReviewPage() {
     if (!tree) return [];
     return Array.from(walkMainline(tree));
   }, [tree]);
+
+  // Game summary — computed from mainline tree data.
+  const gameSummary: GameSummary | null = useMemo(() => {
+    if (!tree || !game) return null;
+    return computeGameSummary(tree, game.humanColor);
+  }, [tree, game]);
+
+  // LLM-enriched game summary narrative (optional, async).
+  const [llmNarrative, setLlmNarrative] = useState<string | null>(null);
+  useEffect(() => {
+    if (!gameSummary || !hasLLM()) return;
+    let cancelled = false;
+    const fetchLlmSummary = async () => {
+      try {
+        const profileSummary = getCurrentProfileSummary();
+        const payload = {
+          templateNarrative: gameSummary.narrative,
+          totalPlies: gameSummary.totalPlies,
+          acpl: gameSummary.acpl,
+          phases: gameSummary.phases,
+          keyMoments: gameSummary.keyMoments.map((km) => ({
+            moveNumber: km.moveNumber,
+            playerMove: km.playerMove,
+            bestMove: km.bestMove,
+            quality: km.quality,
+            cpLoss: km.cpLoss,
+            motifs: km.motifs,
+            phase: km.phase,
+          })),
+          motifTally: gameSummary.motifTally,
+          bestStreak: gameSummary.bestStreak,
+          blunders: gameSummary.blunders,
+          mistakes: gameSummary.mistakes,
+          inaccuracies: gameSummary.inaccuracies,
+          goodOrBetter: gameSummary.goodOrBetter,
+          profileSummary,
+        };
+        const res = await fetch('/api/summarize-game', {
+          method: 'POST',
+          headers: withByokHeader({ 'content-type': 'application/json' }),
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok || cancelled) return;
+        const body = await res.json() as { summary?: string };
+        if (!cancelled && typeof body.summary === 'string') {
+          setLlmNarrative(body.summary);
+        }
+      } catch {
+        // Silent fallback — template narrative stays.
+      }
+    };
+    void fetchLlmSummary();
+    return () => { cancelled = true; };
+  }, [gameSummary]);
 
   // Mistakes for this game, sorted by move number.
   const allEvents = useProfileStore((s) => s.profile.weaknessEvents);
@@ -294,7 +353,7 @@ export default function GameReviewPage() {
         </div>
       </section>
 
-      {/* Column 2: Game info + Move list */}
+      {/* Column 2: Game info + Summary + Move list */}
       <aside className="flex flex-col gap-4">
         {/* Game metadata */}
         <div className="rounded border border-slate-800 bg-slate-900/40 p-4">
@@ -316,6 +375,30 @@ export default function GameReviewPage() {
             </dd>
           </dl>
         </div>
+
+        {/* Eval chart */}
+        {mainline.length > 2 && (
+          <div className="rounded border border-slate-800 bg-slate-900/40 p-4">
+            <h2 className="mb-2 text-sm font-semibold text-slate-200">
+              Evaluation
+            </h2>
+            <EvalChart
+              mainline={mainline}
+              activePly={plyIndex}
+              onPlyClick={setPlyIndex}
+              humanColor={game.humanColor}
+            />
+          </div>
+        )}
+
+        {/* Game summary */}
+        {gameSummary && (
+          <GameSummaryCard
+            summary={gameSummary}
+            llmNarrative={llmNarrative}
+            onPlyClick={setPlyIndex}
+          />
+        )}
 
         {/* Move list */}
         <div className="min-h-[200px] flex-1 overflow-y-auto rounded border border-slate-800 bg-slate-900/40 p-4">

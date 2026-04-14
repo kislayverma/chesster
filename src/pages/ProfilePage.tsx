@@ -1,36 +1,32 @@
 /**
- * Phase 10 ProfilePage — player stats and weakness overview.
+ * ProfilePage — player stats, narrative, and weakness overview.
  *
- * Reads from the profile store to display:
- *   - Total games, total moves, estimated rating + standing
- *   - Rating trend (last 20 games, bar chart)
- *   - Phase-based estimated rating (opening / middlegame / endgame)
- *   - Top weakness motifs by decayed count
+ * Shows:
+ *   - "Your Story" narrative paragraph
+ *   - Summary stats (games, moves, avg rating, latest rating)
+ *   - Rating trend (last 20 games)
+ *   - Phase-based estimated rating
+ *   - Weaknesses split into: Watch out / Improving / Retired
+ *   - Opening insights (best/worst ECO codes)
  */
 
+import { useEffect, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../auth/authStore';
 import { useProfileStore } from '../profile/profileStore';
 import { acplToRating, ratingStanding } from '../lib/rating';
-import type { MotifCounter } from '../profile/types';
+import {
+  getTopWeaknesses,
+  getRetiredWeaknesses,
+} from '../profile/weaknessSelector';
+import { computePlayerNarrative } from '../profile/playerNarrative';
+import { MOTIF_LABELS, type MotifId } from '../tagging/motifs';
+import type { OpeningStat } from '../profile/types';
 import JourneyCard from '../components/JourneyCard';
-
-/** Human-readable labels for motif IDs. */
-const MOTIF_LABELS: Record<string, string> = {
-  hangingPiece: 'Hanging piece',
-  missedFork: 'Missed fork',
-  missedPin: 'Missed pin',
-  missedSkewer: 'Missed skewer',
-  overloadedDefender: 'Overloaded defender',
-  kingSafetyDrop: 'King safety drop',
-  badEndgameTrade: 'Bad endgame trade',
-  undefendedPiece: 'Undefended piece',
-  weakBackRank: 'Weak back rank',
-  pawnStructure: 'Pawn structure',
-};
+import { hasLLM, withByokHeader } from '../lib/featureFlags';
 
 function motifLabel(id: string): string {
-  return MOTIF_LABELS[id] ?? id.replace(/([A-Z])/g, ' $1').trim();
+  return MOTIF_LABELS[id as MotifId] ?? id.replace(/_/g, ' ');
 }
 
 export default function ProfilePage() {
@@ -41,6 +37,77 @@ export default function ProfilePage() {
   const syncing = useAuthStore((s) => s.syncing);
   const isAuthenticated = authStatus === 'authenticated';
 
+  // Compute narrative
+  const narrative = useMemo(
+    () => (profile.totalGames > 0 ? computePlayerNarrative(profile) : null),
+    [profile],
+  );
+
+  // LLM-enriched narrative (optional, async).
+  const [llmNarrative, setLlmNarrative] = useState<string | null>(null);
+  useEffect(() => {
+    if (!narrative || !hasLLM()) return;
+    let cancelled = false;
+    const fetchLlm = async () => {
+      try {
+        const res = await fetch('/api/player-narrative', {
+          method: 'POST',
+          headers: withByokHeader({ 'content-type': 'application/json' }),
+          body: JSON.stringify({
+            templateNarrative: narrative.text,
+            data: narrative.data,
+          }),
+        });
+        if (!res.ok || cancelled) return;
+        const body = await res.json() as { narrative?: string };
+        if (!cancelled && typeof body.narrative === 'string') {
+          setLlmNarrative(body.narrative);
+        }
+      } catch {
+        // Silent fallback — template stays.
+      }
+    };
+    void fetchLlm();
+    return () => { cancelled = true; };
+  }, [narrative]);
+
+  // Weakness categories
+  const { watchOut, improving, retired } = useMemo(() => {
+    const top = getTopWeaknesses(profile, 8);
+    const ret = getRetiredWeaknesses(profile);
+
+    // Split top weaknesses: "improving" = decayedCount < count * 0.3
+    // (recent occurrences are significantly fewer than lifetime)
+    const watch: typeof top = [];
+    const imp: typeof top = [];
+    for (const w of top) {
+      // If decayedCount is less than 30% of lifetime count, they're improving
+      const ratio = w.count > 0 ? w.decayedCount / w.count : 0;
+      if (ratio < 0.3 && w.count >= 3) {
+        imp.push(w);
+      } else {
+        watch.push(w);
+      }
+    }
+    return { watchOut: watch, improving: imp, retired: ret };
+  }, [profile]);
+
+  // Opening insights
+  const openingInsights = useMemo(() => {
+    const entries = Object.entries(profile.openingWeaknesses)
+      .filter(([, stat]) => stat.games >= 3);
+    if (entries.length < 2) return null;
+
+    const sorted = [...entries].sort(
+      ([, a], [, b]) => a.avgCpLoss - b.avgCpLoss,
+    );
+    const best = sorted[0];
+    const worst = sorted[sorted.length - 1];
+    // Only show if there's a meaningful difference
+    if (worst[1].avgCpLoss - best[1].avgCpLoss < 15) return null;
+    return { best, worst };
+  }, [profile]);
+
   if (!hydrated || syncing) {
     return (
       <main className="flex flex-1 items-center justify-center p-3 md:p-6">
@@ -49,8 +116,7 @@ export default function ProfilePage() {
     );
   }
 
-  const { totalGames, totalMoves, acplHistory, motifCounts, phaseCpLoss } =
-    profile;
+  const { totalGames, totalMoves, acplHistory, phaseCpLoss } = profile;
 
   if (totalGames === 0) {
     return (
@@ -80,18 +146,13 @@ export default function ProfilePage() {
       ? acplHistory[acplHistory.length - 1].acpl
       : null;
   const latestRating = latestAcpl != null ? acplToRating(latestAcpl) : null;
-  const latestStanding = latestRating != null ? ratingStanding(latestRating) : null;
+  const latestStanding =
+    latestRating != null ? ratingStanding(latestRating) : null;
 
-  // Top motifs sorted by decayed count (descending).
-  const topMotifs = Object.entries(motifCounts)
-    .filter(([, c]) => c.decayedCount > 0.1)
-    .sort(([, a], [, b]) => b.decayedCount - a.decayedCount)
-    .slice(0, 8);
-
-  // Rating trend (last 20 entries, converted from ACPL).
+  // Rating trend (last 20 entries).
   const sparkData = acplHistory.slice(-20).map((e) => acplToRating(e.acpl));
 
-  // Phase ratings derived from phase ACPL.
+  // Phase ratings.
   const phaseRatings = {
     opening: acplToRating(phaseCpLoss.opening),
     middlegame: acplToRating(phaseCpLoss.middlegame),
@@ -122,6 +183,18 @@ export default function ProfilePage() {
         </button>
       </header>
 
+      {/* Your Story — narrative paragraph */}
+      {narrative && (
+        <section className="rounded-lg border border-emerald-900/50 bg-emerald-950/20 p-4">
+          <h2 className="mb-2 text-sm font-semibold text-emerald-300">
+            Your Story
+          </h2>
+          <p className="text-sm leading-relaxed text-slate-300">
+            {llmNarrative ?? narrative.text}
+          </p>
+        </section>
+      )}
+
       {/* Journey section — only for authenticated users */}
       {isAuthenticated && <JourneyCard />}
 
@@ -131,12 +204,12 @@ export default function ProfilePage() {
         <StatCard label="Moves analyzed" value={String(totalMoves)} />
         <StatCard
           label="Average Rating"
-          value={avgRating != null ? String(avgRating) : '—'}
+          value={avgRating != null ? String(avgRating) : '\u2014'}
           subtitle={avgRating != null ? ratingStanding(avgRating) : undefined}
         />
         <StatCard
           label="Latest Rating"
-          value={latestRating != null ? String(latestRating) : '—'}
+          value={latestRating != null ? String(latestRating) : '\u2014'}
           subtitle={latestStanding ?? undefined}
         />
       </section>
@@ -163,23 +236,104 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      {/* Top Weaknesses */}
-      {topMotifs.length > 0 && (
+      {/* Weaknesses — split view */}
+      {(watchOut.length > 0 || improving.length > 0 || retired.length > 0) && (
         <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
           <h2 className="mb-3 text-sm font-semibold text-slate-200">
-            Top Weaknesses
+            Weaknesses
           </h2>
-          <div className="flex flex-col gap-2">
-            {topMotifs.map(([id, counter]) => (
-              <MotifRow key={id} id={id} counter={counter} />
-            ))}
-          </div>
+
+          {/* Watch out */}
+          {watchOut.length > 0 && (
+            <div className="mb-4">
+              <div className="mb-1.5 flex items-center gap-1.5 text-xs text-amber-400">
+                <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
+                Watch out
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {watchOut.map((w) => (
+                  <WeaknessRow
+                    key={w.motif}
+                    label={motifLabel(w.motif)}
+                    count={w.count}
+                    decayedCount={w.decayedCount}
+                    accent="amber"
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Improving */}
+          {improving.length > 0 && (
+            <div className="mb-4">
+              <div className="mb-1.5 flex items-center gap-1.5 text-xs text-sky-400">
+                <span className="inline-block h-2 w-2 rounded-full bg-sky-500" />
+                Improving
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {improving.map((w) => (
+                  <WeaknessRow
+                    key={w.motif}
+                    label={motifLabel(w.motif)}
+                    count={w.count}
+                    decayedCount={w.decayedCount}
+                    accent="sky"
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Retired */}
+          {retired.length > 0 && (
+            <div>
+              <div className="mb-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                Conquered
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {retired.map((w) => (
+                  <span
+                    key={w.motif}
+                    className="rounded bg-emerald-900/30 px-2 py-0.5 text-[11px] text-emerald-300"
+                  >
+                    {motifLabel(w.motif)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
       )}
 
+      {/* Opening Insights */}
+      {openingInsights && (
+        <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-slate-200">
+            Opening Insights
+          </h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <OpeningCard
+              label="Strongest"
+              eco={openingInsights.best[0]}
+              stat={openingInsights.best[1]}
+              accent="emerald"
+            />
+            <OpeningCard
+              label="Weakest"
+              eco={openingInsights.worst[0]}
+              stat={openingInsights.worst[1]}
+              accent="rose"
+            />
+          </div>
+        </section>
+      )}
     </main>
   );
 }
+
+/* ─── Sub-components ───────────────────────────────────────────────── */
 
 function StatCard({
   label,
@@ -203,7 +357,6 @@ function StatCard({
   );
 }
 
-/** Bar chart for rating values — taller = higher rating = better. */
 function RatingSparkline({ data }: { data: number[] }) {
   const min = Math.min(...data, 400);
   const max = Math.max(...data, 2800);
@@ -266,13 +419,64 @@ function PhaseBar({ label, rating }: { label: string; rating: number }) {
   );
 }
 
-function MotifRow({ id, counter }: { id: string; counter: MotifCounter }) {
+function WeaknessRow({
+  label,
+  count,
+  decayedCount,
+  accent,
+}: {
+  label: string;
+  count: number;
+  decayedCount: number;
+  accent: 'amber' | 'sky';
+}) {
+  // Bar width based on decayedCount relative to a reasonable max (10)
+  const barPct = Math.min(100, (decayedCount / 10) * 100);
+  const barColor = accent === 'amber' ? 'bg-amber-500/60' : 'bg-sky-500/60';
+
   return (
-    <div className="flex items-center justify-between text-xs">
-      <span className="text-slate-300">{motifLabel(id)}</span>
-      <span className="font-mono tabular-nums text-slate-500">
-        {counter.count} occurrence{counter.count !== 1 ? 's' : ''}
+    <div className="relative flex items-center justify-between rounded bg-slate-900/60 px-2.5 py-1.5 text-xs">
+      <div
+        className={`absolute inset-y-0 left-0 rounded ${barColor}`}
+        style={{ width: `${barPct}%` }}
+      />
+      <span className="relative z-10 text-slate-200">{label}</span>
+      <span className="relative z-10 font-mono tabular-nums text-slate-500">
+        {count}×
       </span>
+    </div>
+  );
+}
+
+function OpeningCard({
+  label,
+  eco,
+  stat,
+  accent,
+}: {
+  label: string;
+  eco: string;
+  stat: OpeningStat;
+  accent: 'emerald' | 'rose';
+}) {
+  const borderColor =
+    accent === 'emerald' ? 'border-emerald-900/50' : 'border-rose-900/50';
+  const labelColor =
+    accent === 'emerald' ? 'text-emerald-400' : 'text-rose-400';
+  const ecoRating = acplToRating(stat.avgCpLoss);
+
+  return (
+    <div
+      className={`rounded border ${borderColor} bg-slate-900/60 px-3 py-2.5`}
+    >
+      <div className={`text-[10px] font-medium uppercase tracking-wider ${labelColor}`}>
+        {label}
+      </div>
+      <div className="mt-1 text-sm font-semibold text-slate-200">{eco}</div>
+      <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
+        <span>{stat.games} game{stat.games !== 1 ? 's' : ''}</span>
+        <span>~{ecoRating} rating</span>
+      </div>
     </div>
   );
 }

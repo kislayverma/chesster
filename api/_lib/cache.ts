@@ -36,6 +36,18 @@ export const tagCache = new LRUCache<string, string[]>({
   ttl: TTL_MS,
 });
 
+/** Cached game summary narratives (post-game LLM review). */
+export const summaryCache = new LRUCache<string, string>({
+  max: MAX,
+  ttl: TTL_MS,
+});
+
+/** Cached player narrative (profile-page LLM story). */
+export const narrativeCache = new LRUCache<string, string>({
+  max: MAX,
+  ttl: TTL_MS,
+});
+
 /**
  * SHA-256 digest of a string, returned as lowercase hex. Uses the
  * standard Web Crypto API which is available in Vercel's Edge runtime

@@ -97,7 +97,45 @@ function mainlinePlyCount(tree: GameTree): number {
   return count;
 }
 
+function computeQualityCounts(
+  tree: GameTree,
+  humanColor: 'w' | 'b',
+): { blunders: number; mistakes: number; inaccuracies: number; acpl: number } {
+  let blunders = 0;
+  let mistakes = 0;
+  let inaccuracies = 0;
+  let totalCpLoss = 0;
+  let humanMoves = 0;
+
+  for (const node of walkMainline(tree)) {
+    if (node.parentId === null) continue;
+    if (node.moverColor !== humanColor) continue;
+    if (!node.quality || node.quality === 'book') continue;
+    humanMoves += 1;
+    totalCpLoss += Math.max(0, node.cpLoss ?? 0);
+    if (node.quality === 'blunder') blunders += 1;
+    else if (node.quality === 'mistake') mistakes += 1;
+    else if (node.quality === 'inaccuracy') inaccuracies += 1;
+  }
+
+  return {
+    blunders,
+    mistakes,
+    inaccuracies,
+    acpl: humanMoves > 0 ? Math.round(totalCpLoss / humanMoves) : 0,
+  };
+}
+
 function toIndexEntry(game: PersistedGame): PersistedGameIndexEntry {
+  // Compute quality counts from the tree if possible.
+  let qualityCounts: { blunders: number; mistakes: number; inaccuracies: number; acpl: number } | null = null;
+  try {
+    const tree = deserializeTree(game.tree);
+    qualityCounts = computeQualityCounts(tree, game.humanColor);
+  } catch {
+    // Legacy or corrupt tree — leave quality counts absent.
+  }
+
   return {
     id: game.id,
     startedAt: game.startedAt,
@@ -107,6 +145,7 @@ function toIndexEntry(game: PersistedGame): PersistedGameIndexEntry {
     mainlinePlies: game.mainlinePlies,
     humanColor: game.humanColor,
     engineEnabled: game.engineEnabled,
+    ...(qualityCounts ?? {}),
   };
 }
 
