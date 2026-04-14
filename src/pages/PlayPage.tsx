@@ -33,6 +33,12 @@ export default function PlayPage() {
   const skillLevel = useGameStore((s) => s.skillLevel);
   const branchCapReached = useGameStore((s) => s.branchCapReached);
 
+  const coachingPaused = useGameStore((s) => s.coachingPaused);
+  const dismissCoachingPause = useGameStore((s) => s.dismissCoachingPause);
+  const tryThisLine = useGameStore((s) => s.tryThisLine);
+  const bestMoveBefore = useGameStore((s) => s.lastMoveBestMoveBefore);
+  const lastMoveQuality = useGameStore((s) => s.lastMoveQuality);
+
   const setHumanColor = useGameStore((s) => s.setHumanColor);
   const setSkillLevel = useGameStore((s) => s.setSkillLevel);
 
@@ -52,6 +58,16 @@ export default function PlayPage() {
 
   const boardOrientation: 'white' | 'black' =
     humanColor === 'w' ? 'white' : 'black';
+
+  // Coaching-pause mobile bar: mirror the "isBad + bestMoveBefore" logic from CoachPanel.
+  const isBad =
+    lastMoveQuality === 'inaccuracy' ||
+    lastMoveQuality === 'mistake' ||
+    lastMoveQuality === 'blunder';
+  const showMobilePauseBar =
+    coachingPaused && !gameFinished;
+  const showMobileTryThis =
+    showMobilePauseBar && !!bestMoveBefore && isBad;
 
   // Keyboard shortcuts: left/right arrow keys for navigation.
   useEffect(() => {
@@ -229,6 +245,28 @@ export default function PlayPage() {
       <div className="hidden lg:block lg:w-[320px]">
         <StackPanel />
       </div>
+
+      {/* Sticky mobile coaching-pause bar — always visible in viewport on small screens */}
+      {showMobilePauseBar && (
+        <div className="fixed inset-x-0 bottom-0 z-50 flex gap-2 border-t border-slate-700 bg-slate-900/95 px-4 py-3 backdrop-blur lg:hidden">
+          <button
+            type="button"
+            onClick={dismissCoachingPause}
+            className="flex-1 animate-pulse-ring rounded bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500"
+          >
+            Continue
+          </button>
+          {showMobileTryThis && (
+            <button
+              type="button"
+              onClick={tryThisLine}
+              className="flex-1 rounded bg-amber-700/60 px-3 py-2.5 text-sm font-medium text-amber-50 hover:bg-amber-700"
+            >
+              Try this move
+            </button>
+          )}
+        </div>
+      )}
     </main>
   );
 }

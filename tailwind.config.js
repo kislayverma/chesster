@@ -15,6 +15,15 @@ export default {
           blunder: '#ef4444',
         },
       },
+      animation: {
+        'pulse-ring': 'pulse-ring 2s ease-in-out infinite',
+      },
+      keyframes: {
+        'pulse-ring': {
+          '0%, 100%': { boxShadow: '0 0 0 0 rgba(148, 163, 184, 0.5)' },
+          '50%': { boxShadow: '0 0 0 6px rgba(148, 163, 184, 0)' },
+        },
+      },
     },
   },
   plugins: [],

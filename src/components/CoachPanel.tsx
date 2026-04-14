@@ -30,6 +30,8 @@ export default function CoachPanel() {
   const treeResult = useGameStore((s) => s.tree.result);
   const historyLength = useGameStore((s) => s.history.length);
   const tryThisLine = useGameStore((s) => s.tryThisLine);
+  const coachingPaused = useGameStore((s) => s.coachingPaused);
+  const dismissCoachingPause = useGameStore((s) => s.dismissCoachingPause);
   const fen = useGameStore((s) => s.fen);
 
   // Profile weakness data for recurring motif highlighting
@@ -137,7 +139,27 @@ export default function CoachPanel() {
         {coachText ?? (thinking ? 'Coach is thinking...' : '\u2014')}
       </p>
 
-      {showTryThis && (
+      {/* Coaching pause: two side-by-side buttons when paused */}
+      {coachingPaused && showTryThis ? (
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={dismissCoachingPause}
+            className="flex-1 animate-pulse-ring rounded bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
+            title="Dismiss and let the engine respond"
+          >
+            Continue
+          </button>
+          <button
+            type="button"
+            onClick={tryThisLine}
+            className="flex-1 rounded bg-amber-700/60 px-3 py-2 text-sm font-medium text-amber-50 hover:bg-amber-700"
+            title="Fork at the previous position and play the engine's top move instead"
+          >
+            Try this move
+          </button>
+        </div>
+      ) : showTryThis ? (
         <button
           type="button"
           onClick={tryThisLine}
@@ -146,7 +168,16 @@ export default function CoachPanel() {
         >
           Try this move
         </button>
-      )}
+      ) : coachingPaused ? (
+        <button
+          type="button"
+          onClick={dismissCoachingPause}
+          className="mt-3 w-full animate-pulse-ring rounded bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
+          title="Dismiss and let the engine respond"
+        >
+          Continue
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -246,6 +246,13 @@ interface GameStore
    */
   branchCapReached: boolean;
 
+  /**
+   * True when the game is paused after a mistake/blunder so the player
+   * can absorb the coaching feedback before the engine responds.
+   * Cleared by `dismissCoachingPause`, `tryThisLine`, or `makeMove`.
+   */
+  coachingPaused: boolean;
+
   /** Attempt a move from the current position. Returns true if applied. */
   makeMove: (from: string, to: string, promotion?: string) => boolean;
 
@@ -285,6 +292,12 @@ interface GameStore
 
   /** Resign the current game. The human player loses. */
   resign: () => void;
+
+  /**
+   * Dismiss the coaching pause and let the engine play its response.
+   * No-op when `coachingPaused` is false.
+   */
+  dismissCoachingPause: () => void;
 
   /**
    * Load a previously persisted game tree into the store so the
@@ -683,6 +696,19 @@ export const useGameStore = create<GameStore>((set, get) => {
           return;
         }
 
+        // Coaching pause: if the human just played a mistake or blunder,
+        // hold the game so they can absorb the feedback. The engine move
+        // is deferred until dismissCoachingPause() is called.
+        if (
+          humanMove &&
+          state.lastMoveQuality != null &&
+          (state.lastMoveQuality === 'mistake' ||
+            state.lastMoveQuality === 'blunder')
+        ) {
+          set({ coachingPaused: true });
+          return;
+        }
+
         // Brief pause so the player can see their own move before the
         // engine replies instantly. 400ms feels natural.
         await new Promise((r) => setTimeout(r, 400));
@@ -813,6 +839,9 @@ export const useGameStore = create<GameStore>((set, get) => {
     // Branch cap error
     branchCapReached: false,
 
+    // Coaching pause
+    coachingPaused: false,
+
     makeMove: (from, to, promotion) => {
       const state = get();
       if (state.isGameOver) return false;
@@ -903,6 +932,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         ...snap,
         lastBestMove: null,
         ...EMPTY_COACH_STATE,
+        coachingPaused: false,
         lastMoveFrom: from,
         lastMoveTo: to,
       });
@@ -1050,6 +1080,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         mate: null,
         evalDepth: 0,
         ...EMPTY_COACH_STATE,
+        coachingPaused: false,
       });
 
       // Observation-only: "best move" coaching would just say "best move".
@@ -1112,6 +1143,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         mate: null,
         evalDepth: 0,
         ...EMPTY_COACH_STATE,
+        coachingPaused: false,
       });
       // If the human is black, Stockfish needs to open the game.
       if (get().engineEnabled && get().humanColor === 'b') {
@@ -1222,6 +1254,18 @@ export const useGameStore = create<GameStore>((set, get) => {
       persistTree(tree, humanColor, engineEnabled, Date.now());
     },
 
+    dismissCoachingPause: () => {
+      if (!get().coachingPaused) return;
+      set({ coachingPaused: false });
+
+      // Re-trigger analysis from the current position without a
+      // humanMove context — kickAnalysis will see it's the engine's
+      // turn and auto-play (with the normal 400ms delay).
+      const { fen, turn } = get();
+      analysisSeq += 1;
+      kickAnalysis(fen, turn, analysisSeq);
+    },
+
     resumeGame: (loadedTree, humanColor, engineEnabled) => {
       // Persist the outgoing game first (same as reset).
       const prev = get();
@@ -1259,6 +1303,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         mate: null,
         evalDepth: 0,
         ...EMPTY_COACH_STATE,
+        coachingPaused: false,
       });
 
       // If it's the engine's turn, kick analysis so it plays.
