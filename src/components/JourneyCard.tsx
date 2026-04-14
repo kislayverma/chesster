@@ -11,12 +11,15 @@ import { MOTIF_LABELS, type MotifId } from '../tagging/motifs';
 export default function JourneyCard() {
   const journey = useProfileStore((s) => s.profile.journeyState);
   const acplHistory = useProfileStore((s) => s.profile.acplHistory);
+  const totalGames = useProfileStore((s) => s.profile.totalGames);
 
   if (!journey) return null;
 
   const current = getLevelDef(journey.currentLevel);
   const next = nextLevel(journey.currentLevel);
   const focusMotifs = levelFocusAreas(journey.currentLevel);
+  // Guard: no games played yet means 0% progress regardless of stored state.
+  const effectiveProgress = totalGames > 0 ? journey.levelProgress : 0;
 
   // Sparkline: last 10 game ratings
   const sparkData = acplHistory.slice(-10).map((e) => acplToRating(e.acpl));
@@ -46,13 +49,13 @@ export default function JourneyCard() {
               Progress to {next.name}
             </span>
             <span className="font-mono tabular-nums text-slate-300">
-              {journey.levelProgress}%
+              {effectiveProgress}%
             </span>
           </div>
           <div className="h-2.5 overflow-hidden rounded-full bg-slate-800">
             <div
               className="h-full rounded-full bg-emerald-500 transition-all duration-500"
-              style={{ width: `${journey.levelProgress}%` }}
+              style={{ width: `${effectiveProgress}%` }}
             />
           </div>
           <p className="mt-1 text-[11px] text-slate-500">

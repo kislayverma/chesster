@@ -56,7 +56,7 @@ export default function HomePage() {
       hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
     const levelDef = getLevelDef(journey?.currentLevel ?? 'newcomer');
     const next = nextLevel(journey?.currentLevel ?? 'newcomer');
-    const progress = journey?.levelProgress ?? 0;
+    const progress = totalGames > 0 ? (journey?.levelProgress ?? 0) : 0;
 
     return (
       <main className="mx-auto flex max-w-3xl flex-1 flex-col items-center justify-center gap-6 p-3 md:gap-8 md:p-6">

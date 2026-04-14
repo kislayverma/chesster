@@ -28,13 +28,18 @@
  * through onboarding. Only genuinely new sign-ins (no remote data)
  * are left for the OnboardingPage to handle.
  *
- * Sign-out policy: local IndexedDB is preserved. The user can keep
- * playing anonymously with their library intact, and signing back in
- * as the same user re-triggers the hydrate. Signing in as a different
- * user on the same device would merge data — out of scope for the
- * Phase 9 MVP (see DESIGN.md §12a future-work notes).
+ * Sign-out policy: all local data is wiped — IndexedDB (games,
+ * profile, practice cards, migration claim), the local BYOK key
+ * cache, and the anonymous device id. This ensures a clean slate
+ * so a different user can sign in without seeing stale data.
+ * Signing back in as the same user re-triggers `hydrateFromRemote`
+ * which pulls everything back down from Supabase — including the
+ * BYOK key from the `byok_keys` table. The backend BYOK key is
+ * only deleted when the user explicitly clicks "Remove key" in
+ * Settings.
  */
 
+import localforage from 'localforage';
 import {
   setOnSignInHandler,
   setOnSignOutHandler,
@@ -47,6 +52,11 @@ import { loadAllCardsRemote, saveCardRemote } from './remotePracticeStore';
 import { writePersistedGame } from '../game/gameStorage';
 import { useProfileStore } from '../profile/profileStore';
 import { usePracticeStore } from '../srs/practiceStore';
+import { useGameStore } from '../game/gameStore';
+import { clearByokKey, setByokKey } from '../lib/byokStorage';
+import { markServerModeByokOnly } from '../lib/featureFlags';
+import { loadByokKeyRemote, saveByokKeyRemote, deleteByokKeyRemote } from './remoteByokStore';
+import { clearAnonId } from '../lib/anonId';
 import type { PersistedGame, PlayerProfile } from '../profile/types';
 import type { PracticeCard } from '../srs/types';
 
@@ -84,11 +94,30 @@ export function initSyncOrchestrator(): void {
     // Genuinely first sign-in — let OnboardingPage handle migration.
   });
 
-  setOnSignOutHandler(() => {
-    // Intentionally no-op: keep local stores intact so the user can
-    // keep playing as anon. The auth store itself already cleared
-    // `user`/`session`, so `pushGameRemote` / `pushProfileRemote`
-    // will short-circuit on the next mutation.
+  setOnSignOutHandler(async () => {
+    // Wipe all local data so a different user can sign in cleanly.
+
+    // 1. Reset in-memory Zustand stores.
+    useProfileStore.getState().clearProfile();
+    usePracticeStore.getState().replaceCards([]);
+    useGameStore.getState().reset();
+
+    // 2. Clear BYOK key locally (in-memory cache + IndexedDB).
+    //    The backend copy is preserved — it will be fetched again on
+    //    the next sign-in. Only an explicit "Remove key" in Settings
+    //    deletes the backend row.
+    await clearByokKey();
+
+    // 3. Wipe all IndexedDB entries (games, profile, practice cards,
+    //    migration claim, etc.).
+    try {
+      await localforage.clear();
+    } catch {
+      // best effort
+    }
+
+    // 4. Clear localStorage anon device id.
+    clearAnonId();
   });
 }
 
@@ -122,6 +151,14 @@ export async function hydrateFromRemote(userId: string): Promise<void> {
     const cards = await loadAllCardsRemote(userId);
     if (cards.length > 0) {
       usePracticeStore.getState().replaceCards(cards);
+    }
+
+    // BYOK key: fetch from backend and cache locally so the user
+    // doesn't have to re-enter it on every new device / sign-in.
+    const remoteKey = await loadByokKeyRemote(userId);
+    if (remoteKey) {
+      await setByokKey(remoteKey);
+      markServerModeByokOnly();
     }
   } catch (err) {
     console.warn('[syncOrchestrator] hydrate failed', err);
@@ -167,5 +204,31 @@ export function pushCardRemote(card: PracticeCard): void {
   if (!userId) return;
   void saveCardRemote(userId, card).catch((err) => {
     console.warn('[syncOrchestrator] pushCard failed', err);
+  });
+}
+
+/**
+ * Fire-and-forget: upsert the user's BYOK API key to Supabase so it
+ * persists across devices. Called from `SettingsPage` after the user
+ * saves a key. No-op when not authenticated.
+ */
+export function pushByokKeyRemote(apiKey: string): void {
+  const userId = useAuthStore.getState().user?.id;
+  if (!userId) return;
+  void saveByokKeyRemote(userId, apiKey).catch((err) => {
+    console.warn('[syncOrchestrator] pushByokKey failed', err);
+  });
+}
+
+/**
+ * Fire-and-forget: permanently delete the user's BYOK API key from
+ * Supabase. Called from `SettingsPage` when the user clicks "Remove
+ * key". No-op when not authenticated.
+ */
+export function removeByokKeyRemote(): void {
+  const userId = useAuthStore.getState().user?.id;
+  if (!userId) return;
+  void deleteByokKeyRemote(userId).catch((err) => {
+    console.warn('[syncOrchestrator] removeByokKey failed', err);
   });
 }

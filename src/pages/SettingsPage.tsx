@@ -23,6 +23,7 @@ import {
   subscribeLlmMode,
   type LlmMode,
 } from '../lib/featureFlags';
+import { pushByokKeyRemote, removeByokKeyRemote } from '../sync/syncOrchestrator';
 import localforage from 'localforage';
 import { useGameStore } from '../game/gameStore';
 import { useProfileStore } from '../profile/profileStore';
@@ -88,6 +89,9 @@ export default function SettingsPage() {
       // reachable (e.g. `npm run dev`), the coach will silently fall
       // back to templates on LLM failure, which is correct behavior.
       markServerModeByokOnly();
+      // Persist the key to Supabase so it survives sign-out / sign-in
+      // cycles and is available on other devices.
+      pushByokKeyRemote(candidate);
       setInput('');
       setStatus('Key saved. Play a move to see Claude-powered coaching.');
     } finally {
@@ -99,6 +103,9 @@ export default function SettingsPage() {
     setBusy(true);
     try {
       await clearByokKey();
+      // Permanently delete from Supabase — the user explicitly chose
+      // to remove their key.
+      removeByokKeyRemote();
       setInput('');
       setStatus('Key removed. Coach fell back to rule-based templates.');
     } finally {
