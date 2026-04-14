@@ -151,61 +151,63 @@ export default function PlayPage() {
 
       {/* Column 2: Settings + Coach (desktop) + Moves */}
       <aside className="flex flex-col gap-3 lg:gap-4 lg:w-64">
-        <div className="rounded border border-slate-800 bg-slate-900/40 p-3 lg:p-4">
-          <h2 className="mb-3 text-sm font-semibold text-slate-200">
-            Game settings
-          </h2>
+        {!isGameOver && (
+          <div className="rounded border border-slate-800 bg-slate-900/40 p-3 lg:p-4">
+            <h2 className="mb-3 text-sm font-semibold text-slate-200">
+              Game settings
+            </h2>
 
-          <div>
-            <div className="mb-1 text-xs text-slate-400">Play as</div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setHumanColor('w')}
-                className={`flex-1 rounded px-2 py-1 text-xs ${
-                  humanColor === 'w'
-                    ? 'bg-slate-200 text-slate-900'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                White
-              </button>
-              <button
-                type="button"
-                onClick={() => setHumanColor('b')}
-                className={`flex-1 rounded px-2 py-1 text-xs ${
-                  humanColor === 'b'
-                    ? 'bg-slate-200 text-slate-900'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                Black
-              </button>
+            <div>
+              <div className="mb-1 text-xs text-slate-400">Play as</div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setHumanColor('w')}
+                  className={`flex-1 rounded px-2 py-1 text-xs ${
+                    humanColor === 'w'
+                      ? 'bg-slate-200 text-slate-900'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  White
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHumanColor('b')}
+                  className={`flex-1 rounded px-2 py-1 text-xs ${
+                    humanColor === 'b'
+                      ? 'bg-slate-200 text-slate-900'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  Black
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <div className="mb-1 flex items-center justify-between text-xs text-slate-400">
+                <span>AI skill level</span>
+                <span className="font-mono tabular-nums text-slate-200">
+                  {skillLevel}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={20}
+                step={1}
+                value={skillLevel}
+                onChange={(e) => setSkillLevel(parseInt(e.target.value, 10))}
+                className="w-full accent-slate-400"
+              />
+              <div className="mt-1 flex justify-between text-[10px] text-slate-500">
+                <span>0</span>
+                <span>20</span>
+              </div>
             </div>
           </div>
-
-          <div className="mt-3">
-            <div className="mb-1 flex items-center justify-between text-xs text-slate-400">
-              <span>AI skill level</span>
-              <span className="font-mono tabular-nums text-slate-200">
-                {skillLevel}
-              </span>
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={20}
-              step={1}
-              value={skillLevel}
-              onChange={(e) => setSkillLevel(parseInt(e.target.value, 10))}
-              className="w-full accent-slate-400"
-            />
-            <div className="mt-1 flex justify-between text-[10px] text-slate-500">
-              <span>0</span>
-              <span>20</span>
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* Coach panel — desktop only (mobile version is above, right after board) */}
         <div className="hidden lg:block">

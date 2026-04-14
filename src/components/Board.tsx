@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import type {
@@ -41,13 +42,13 @@ const SELECTED_SQUARE_STYLE: Record<string, string | number> = {
 };
 
 export default function Board({ orientation = 'white' }: BoardProps) {
+  const navigate = useNavigate();
   const fen = useGameStore((s) => s.fen);
   const makeMove = useGameStore((s) => s.makeMove);
   const isGameOver = useGameStore((s) => s.isGameOver);
   const result = useGameStore((s) => s.result);
   const reset = useGameStore((s) => s.reset);
-  const goToNode = useGameStore((s) => s.goToNode);
-  const rootId = useGameStore((s) => s.tree.rootId);
+  const treeId = useGameStore((s) => s.tree.id);
   const inCheck = useGameStore((s) => s.inCheck);
   const lastMoveQuality = useGameStore((s) => s.lastMoveQuality);
   const lastMoveBestMoveBefore = useGameStore((s) => s.lastMoveBestMoveBefore);
@@ -345,7 +346,7 @@ export default function Board({ orientation = 'white' }: BoardProps) {
               </button>
               <button
                 type="button"
-                onClick={() => { goToNode(rootId); setGameOverDismissed(true); }}
+                onClick={() => navigate(`/library/${treeId}`)}
                 className="rounded-lg bg-slate-700 px-5 py-2 text-sm font-medium text-slate-200 hover:bg-slate-600"
               >
                 Review game
