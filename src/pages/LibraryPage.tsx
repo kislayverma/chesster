@@ -76,6 +76,49 @@ function groupByDate(
   return groups;
 }
 
+/** Small colored dots summarizing quality breakdown for a finished game. */
+function QualityDots({ entry }: { entry: PersistedGameIndexEntry }) {
+  const { blunders, mistakes, inaccuracies, acpl } = entry;
+  // Only show for finished games that have quality data.
+  if (entry.finishedAt === null) return null;
+  if (blunders == null && mistakes == null && inaccuracies == null) return null;
+
+  const b = blunders ?? 0;
+  const m = mistakes ?? 0;
+  const i = inaccuracies ?? 0;
+  const total = b + m + i;
+  if (total === 0 && acpl != null) {
+    return (
+      <span className="text-[10px] text-emerald-500" title={`ACPL ${acpl} — clean game`}>
+        Clean
+      </span>
+    );
+  }
+
+  // Build dot array: up to 5 dots, most severe first.
+  const dots: Array<{ color: string; title: string }> = [];
+  for (let d = 0; d < Math.min(b, 3); d++) dots.push({ color: 'bg-rose-500', title: 'Blunder' });
+  for (let d = 0; d < Math.min(m, 3); d++) dots.push({ color: 'bg-orange-500', title: 'Mistake' });
+  for (let d = 0; d < Math.min(i, 3); d++) dots.push({ color: 'bg-amber-400', title: 'Inaccuracy' });
+  // Cap at 5 visible dots.
+  const visible = dots.slice(0, 5);
+  const overflow = total - visible.length;
+
+  return (
+    <span
+      className="flex items-center gap-0.5"
+      title={`${b} blunder${b !== 1 ? 's' : ''}, ${m} mistake${m !== 1 ? 's' : ''}, ${i} inaccurac${i !== 1 ? 'ies' : 'y'}${acpl != null ? ` · ACPL ${acpl}` : ''}`}
+    >
+      {visible.map((dot, idx) => (
+        <span key={idx} className={`inline-block h-1.5 w-1.5 rounded-full ${dot.color}`} />
+      ))}
+      {overflow > 0 && (
+        <span className="text-[9px] text-slate-500">+{overflow}</span>
+      )}
+    </span>
+  );
+}
+
 export default function LibraryPage() {
   const [games, setGames] = useState<PersistedGameIndexEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -173,9 +216,12 @@ export default function LibraryPage() {
                             as {g.humanColor === 'w' ? 'White' : 'Black'}
                           </span>
                         </div>
-                        <span className="text-xs text-slate-500">
-                          {formatTime(g.updatedAt)}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500">
+                            {formatTime(g.updatedAt)}
+                          </span>
+                          <QualityDots entry={g} />
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-2">

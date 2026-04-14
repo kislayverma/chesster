@@ -173,4 +173,10 @@ export interface PersistedGameIndexEntry {
   mainlinePlies: number;
   humanColor: 'w' | 'b';
   engineEnabled: boolean;
+  /** Quality counts for the human's moves (absent on legacy entries). */
+  blunders?: number;
+  mistakes?: number;
+  inaccuracies?: number;
+  /** Human's ACPL for the game (absent on legacy entries). */
+  acpl?: number;
 }
