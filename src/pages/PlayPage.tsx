@@ -6,7 +6,7 @@
  * Content is a direct carryover from Phase 4 `App.tsx`.
  */
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { NavLink } from 'react-router-dom';
 import Board from '../components/Board';
 import CoachPanel from '../components/CoachPanel';
@@ -91,7 +91,25 @@ export default function PlayPage() {
     return () => window.removeEventListener('keydown', handler);
   }, [goBack, goForward]);
 
+  // Nudge flash: when Board dispatches 'coaching-pause-nudge', briefly
+  // add a scale-bounce class to the fixed footer bar.
+  const pauseBarRef = useRef<HTMLDivElement>(null);
+  const nudge = useCallback(() => {
+    const el = pauseBarRef.current;
+    if (!el) return;
+    el.classList.remove('animate-nudge-flash');
+    // Force reflow so re-adding the class restarts the animation.
+    void el.offsetWidth;
+    el.classList.add('animate-nudge-flash');
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('coaching-pause-nudge', nudge);
+    return () => window.removeEventListener('coaching-pause-nudge', nudge);
+  }, [nudge]);
+
   return (
+    <>
     <main className="grid flex-1 grid-cols-1 gap-3 p-3 lg:gap-6 lg:p-6 lg:grid-cols-[auto_auto_320px]">
       {/* Column 1: Board + controls */}
       <section className="flex flex-col items-center gap-3 lg:gap-4">
@@ -246,27 +264,32 @@ export default function PlayPage() {
         <StackPanel />
       </div>
 
-      {/* Sticky mobile coaching-pause bar — always visible in viewport on small screens */}
-      {showMobilePauseBar && (
-        <div className="fixed inset-x-0 bottom-0 z-50 flex gap-2 border-t border-slate-700 bg-slate-900/95 px-4 py-3 backdrop-blur lg:hidden">
+    </main>
+
+    {/* Sticky coaching-pause bar — outside <main> grid so fixed positioning works */}
+    {showMobilePauseBar && (
+      <div
+        ref={pauseBarRef}
+        className="fixed inset-x-0 bottom-0 z-50 flex gap-2 border-t border-slate-700 bg-slate-900/95 px-4 py-3 backdrop-blur lg:hidden"
+      >
+        <button
+          type="button"
+          onClick={dismissCoachingPause}
+          className="flex-1 animate-pulse-ring rounded bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500"
+        >
+          Continue
+        </button>
+        {showMobileTryThis && (
           <button
             type="button"
-            onClick={dismissCoachingPause}
-            className="flex-1 animate-pulse-ring rounded bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500"
+            onClick={tryThisLine}
+            className="flex-1 rounded bg-amber-700/60 px-3 py-2.5 text-sm font-medium text-amber-50 hover:bg-amber-700"
           >
-            Continue
+            Try this move
           </button>
-          {showMobileTryThis && (
-            <button
-              type="button"
-              onClick={tryThisLine}
-              className="flex-1 rounded bg-amber-700/60 px-3 py-2.5 text-sm font-medium text-amber-50 hover:bg-amber-700"
-            >
-              Try this move
-            </button>
-          )}
-        </div>
-      )}
-    </main>
+        )}
+      </div>
+    )}
+    </>
   );
 }

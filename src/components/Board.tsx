@@ -10,7 +10,7 @@ import type {
   Square,
 } from 'react-chessboard/dist/chessboard/types';
 import { useGameStore } from '../game/gameStore';
-import { playMoveSound, playCaptureSound } from '../lib/moveSound';
+import { playMoveSound, playCaptureSound, playWarningBeep } from '../lib/moveSound';
 
 interface BoardProps {
   orientation?: 'white' | 'black';
@@ -55,6 +55,13 @@ export default function Board({ orientation = 'white' }: BoardProps) {
   const lastMoveBestMoveBefore = useGameStore((s) => s.lastMoveBestMoveBefore);
   const lastMoveFrom = useGameStore((s) => s.lastMoveFrom);
   const lastMoveTo = useGameStore((s) => s.lastMoveTo);
+  const coachingPaused = useGameStore((s) => s.coachingPaused);
+
+  /** Emit a warning beep + dispatch event so the pause bar can flash. */
+  const warnPaused = useCallback(() => {
+    playWarningBeep();
+    window.dispatchEvent(new CustomEvent('coaching-pause-nudge'));
+  }, []);
 
   // ─── Game-over modal state ──────────────────────────────────────
   // The game is finished when tree.result is set (covers mainline AND
@@ -113,6 +120,7 @@ export default function Board({ orientation = 'white' }: BoardProps) {
   const highlightLegalMoves = useCallback(
     (square: Square) => {
       if (isGameOver) return;
+      if (coachingPaused) { warnPaused(); return; }
       if (selectedSquare === square) {
         // Toggle off.
         setSelectedSquare(null);
@@ -142,7 +150,7 @@ export default function Board({ orientation = 'white' }: BoardProps) {
         setLegalMoveSquares({});
       }
     },
-    [fen, isGameOver, selectedSquare],
+    [fen, isGameOver, coachingPaused, warnPaused, selectedSquare],
   );
 
   /**
@@ -162,6 +170,7 @@ export default function Board({ orientation = 'white' }: BoardProps) {
   const onPieceDrop = useCallback(
     (sourceSquare: string, targetSquare: string, piece: Piece): boolean => {
       if (isGameOver) return false;
+      if (coachingPaused) { warnPaused(); return false; }
       setSelectedSquare(null);
       setLegalMoveSquares({});
 
@@ -174,7 +183,7 @@ export default function Board({ orientation = 'white' }: BoardProps) {
 
       return makeMove(sourceSquare, targetSquare);
     },
-    [isGameOver, makeMove, isPromotionMove],
+    [isGameOver, coachingPaused, warnPaused, makeMove, isPromotionMove],
   );
 
   const onPromotionPieceSelect = useCallback(
@@ -200,6 +209,7 @@ export default function Board({ orientation = 'white' }: BoardProps) {
    */
   const onSquareClick = useCallback(
     (square: Square) => {
+      if (coachingPaused) { warnPaused(); return; }
       // If a piece is selected and the clicked square is a legal target,
       // execute the move.
       if (selectedSquare && legalMoveSquares[square]) {
@@ -231,11 +241,12 @@ export default function Board({ orientation = 'white' }: BoardProps) {
       // Otherwise, select/deselect the clicked piece.
       highlightLegalMoves(square);
     },
-    [selectedSquare, legalMoveSquares, fen, makeMove, highlightLegalMoves],
+    [coachingPaused, warnPaused, selectedSquare, legalMoveSquares, fen, makeMove, highlightLegalMoves],
   );
 
   const onPieceClick = useCallback(
     (_piece: Piece, square: Square) => {
+      if (coachingPaused) { warnPaused(); return; }
       // If a piece is already selected and we click a different own piece,
       // switch selection. If the target is an enemy piece that's a legal
       // capture target, execute the move.
@@ -248,7 +259,7 @@ export default function Board({ orientation = 'white' }: BoardProps) {
       }
       highlightLegalMoves(square);
     },
-    [selectedSquare, legalMoveSquares, makeMove, highlightLegalMoves],
+    [coachingPaused, warnPaused, selectedSquare, legalMoveSquares, makeMove, highlightLegalMoves],
   );
 
   // ─── Coach arrows ──────────────────────────────────────────────

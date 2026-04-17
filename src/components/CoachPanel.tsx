@@ -139,9 +139,11 @@ export default function CoachPanel() {
         {coachText ?? (thinking ? 'Coach is thinking...' : '\u2014')}
       </p>
 
-      {/* Coaching pause: two side-by-side buttons when paused */}
+      {/* Coaching pause / try-this buttons.
+          On mobile (<lg) these are rendered as a fixed footer bar in PlayPage,
+          so we only show them here on desktop (hidden lg:block). */}
       {coachingPaused && showTryThis ? (
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 hidden gap-2 lg:flex">
           <button
             type="button"
             onClick={dismissCoachingPause}
@@ -163,7 +165,7 @@ export default function CoachPanel() {
         <button
           type="button"
           onClick={tryThisLine}
-          className="mt-3 w-full rounded bg-amber-700/60 px-3 py-1.5 text-xs font-medium text-amber-50 hover:bg-amber-700"
+          className="mt-3 hidden w-full rounded bg-amber-700/60 px-3 py-1.5 text-xs font-medium text-amber-50 hover:bg-amber-700 lg:block"
           title="Fork at the previous position and play the engine's top move instead"
         >
           Try this move
@@ -172,7 +174,7 @@ export default function CoachPanel() {
         <button
           type="button"
           onClick={dismissCoachingPause}
-          className="mt-3 w-full animate-pulse-ring rounded bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
+          className="mt-3 hidden w-full animate-pulse-ring rounded bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500 lg:block"
           title="Dismiss and let the engine respond"
         >
           Continue

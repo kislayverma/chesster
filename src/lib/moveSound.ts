@@ -39,6 +39,30 @@ export function playMoveSound(): void {
   }
 }
 
+/** Play a short warning buzz when the player tries to move while paused. */
+export function playWarningBeep(): void {
+  try {
+    const ctx = getAudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(220, ctx.currentTime);
+    osc.frequency.setValueAtTime(180, ctx.currentTime + 0.06);
+
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.15);
+  } catch {
+    // Audio not available — silently ignore.
+  }
+}
+
 /** Play a slightly deeper click for captures. */
 export function playCaptureSound(): void {
   try {
