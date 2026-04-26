@@ -25,6 +25,7 @@ import GameSummaryCard from '../components/GameSummaryCard';
 import EvalChart from '../components/EvalChart';
 import { hasLLM, withByokHeader } from '../lib/featureFlags';
 import { getCurrentProfileSummary } from '../profile/profileStore';
+import { acplToRating, ratingStanding } from '../lib/rating';
 
 const LAST_MOVE_STYLE: Record<string, string | number> = {
   backgroundColor: 'rgba(255, 255, 0, 0.3)',
@@ -373,6 +374,17 @@ export default function GameReviewPage() {
             <dd className="text-slate-300">
               {game.engineEnabled ? 'Stockfish' : 'Human'}
             </dd>
+            {gameSummary && game.finishedAt && (
+              <>
+                <dt className="text-slate-500">Your Rating</dt>
+                <dd className="font-semibold text-slate-200">
+                  ~{acplToRating(gameSummary.acpl)}{' '}
+                  <span className="font-normal text-slate-400">
+                    ({ratingStanding(acplToRating(gameSummary.acpl))})
+                  </span>
+                </dd>
+              </>
+            )}
           </dl>
         </div>
 

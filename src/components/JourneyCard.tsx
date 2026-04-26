@@ -4,7 +4,7 @@
  */
 
 import { useProfileStore } from '../profile/profileStore';
-import { getLevelDef, nextLevel, acplToRating } from '../lib/rating';
+import { getLevelDef, nextLevel, acplToRating, ratingStanding } from '../lib/rating';
 import { levelFocusAreas, MIN_GAMES_FOR_PROMOTION } from '../lib/journey';
 import { MOTIF_LABELS, type MotifId } from '../tagging/motifs';
 
@@ -38,9 +38,16 @@ export default function JourneyCard() {
           <h2 className="text-lg font-bold text-slate-100">{current.name}</h2>
           <p className="text-xs text-slate-400">{current.description}</p>
         </div>
-        <span className="font-mono text-xl tabular-nums text-slate-200">
-          ~{journey.rollingRating}
-        </span>
+        <div className="text-right">
+          <span className="font-mono text-xl tabular-nums text-slate-200">
+            ~{journey.rollingRating}
+          </span>
+          {journey.rollingRating > 0 && (
+            <p className="text-[11px] text-slate-400">
+              {ratingStanding(journey.rollingRating)}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Progress bar */}

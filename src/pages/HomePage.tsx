@@ -84,6 +84,14 @@ export default function HomePage() {
               style={{ width: `${Math.min(100, progress)}%` }}
             />
           </div>
+          {totalGames > 0 && journey?.rollingRating != null && journey.rollingRating > 0 && (
+            <p className="mt-1 text-center text-sm font-semibold text-slate-200">
+              Current Rating: ~{journey.rollingRating}{' '}
+              <span className="font-normal text-slate-400">
+                ({ratingStanding(journey.rollingRating)})
+              </span>
+            </p>
+          )}
           <p className="mt-1 text-center text-xs text-slate-500">
             {next
               ? progress >= 99 && gamesNeeded > 0

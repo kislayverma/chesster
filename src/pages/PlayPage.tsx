@@ -6,7 +6,7 @@
  * Content is a direct carryover from Phase 4 `App.tsx`.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import Board from '../components/Board';
 import CoachPanel from '../components/CoachPanel';
@@ -14,6 +14,8 @@ import MoveList from '../components/MoveList';
 import PracticePrompt from '../components/PracticePrompt';
 import StackPanel from '../components/StackPanel';
 import { useGameStore } from '../game/gameStore';
+import { useProfileStore } from '../profile/profileStore';
+import { acplToRating, ratingStanding } from '../lib/rating';
 
 export default function PlayPage() {
   const turn = useGameStore((s) => s.turn);
@@ -47,9 +49,19 @@ export default function PlayPage() {
   const gameFinished = !!treeResult || isGameOver;
   const displayResult = treeResult ?? result;
 
+  // Derive the per-game Elo rating from the latest acplHistory entry.
+  const acplHistory = useProfileStore((s) => s.profile.acplHistory);
+  const gameRating = useMemo(() => {
+    if (!gameFinished || acplHistory.length === 0) return null;
+    const latest = acplHistory[acplHistory.length - 1];
+    return acplToRating(latest.acpl);
+  }, [gameFinished, acplHistory]);
+
   const statusLine = gameFinished
     ? displayResult
-      ? `Game over · ${displayResult}`
+      ? gameRating != null
+        ? `Game over · ${displayResult} · Rating: ${gameRating} (${ratingStanding(gameRating)})`
+        : `Game over · ${displayResult}`
       : 'Game over'
     : `${turn === 'w' ? 'White' : 'Black'} to move${inCheck ? ' · check' : ''}`;
 
