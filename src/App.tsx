@@ -4,7 +4,9 @@
  */
 
 import AppRoutes from './routes';
+import { usePageTracking } from './lib/usePageTracking';
 
 export default function App() {
+  usePageTracking();
   return <AppRoutes />;
 }

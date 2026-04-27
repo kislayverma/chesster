@@ -13,6 +13,7 @@ import { listGames, deleteGame, loadGame, purgeStaleUnfinished } from '../game/g
 import { deserializeTree } from '../game/gameStorage';
 import { useGameStore } from '../game/gameStore';
 import type { PersistedGameIndexEntry } from '../profile/types';
+import { trackEvent } from '../lib/analytics';
 
 /** Date-only string for grouping (e.g. "Apr 12, 2026"). */
 function formatDateGroup(ts: number): string {
@@ -129,6 +130,7 @@ export default function LibraryPage() {
     setLoading(true);
     const list = await listGames();
     setGames(list);
+    trackEvent('library_viewed', { gameCount: list.length });
     setLoading(false);
   }, []);
 
@@ -142,6 +144,7 @@ export default function LibraryPage() {
       e.preventDefault();
       e.stopPropagation();
       if (!confirm('Delete this game? This cannot be undone.')) return;
+      trackEvent('library_game_deleted', { gameId: id });
       await deleteGame(id);
       await refresh();
     },
@@ -154,6 +157,7 @@ export default function LibraryPage() {
       e.stopPropagation();
       const game = await loadGame(id);
       if (!game) return;
+      trackEvent('library_game_resumed', { gameId: id });
       const tree = deserializeTree(game.tree);
       resumeGame(tree, humanColor, engineEnabled);
       navigate('/play');

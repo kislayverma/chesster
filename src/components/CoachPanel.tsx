@@ -14,6 +14,7 @@ import { useGameStore } from '../game/gameStore';
 import { QUALITY_COLORS, QUALITY_LABELS } from '../game/moveClassifier';
 import { MOTIF_LABELS, type MotifId } from '../tagging/motifs';
 import { useProfileStore } from '../profile/profileStore';
+import { trackEvent } from '../lib/analytics';
 
 /** Minimum decayedCount to highlight a motif as "recurring". */
 const RECURRING_THRESHOLD = 2;
@@ -88,7 +89,13 @@ export default function CoachPanel() {
         {quality ? (
           <button
             type="button"
-            onClick={() => isBad && setCpExpanded(!cpExpanded)}
+            onClick={() => {
+              if (isBad) {
+                const next = !cpExpanded;
+                setCpExpanded(next);
+                if (next) trackEvent('cp_loss_expanded', { quality });
+              }
+            }}
             className={`rounded px-2 py-0.5 text-xs font-semibold ${QUALITY_COLORS[quality]} ${isBad ? 'cursor-pointer' : ''}`}
             title={isBad && cpLoss ? `Click to ${cpExpanded ? 'hide' : 'show'} details` : undefined}
           >
@@ -146,7 +153,7 @@ export default function CoachPanel() {
         <div className="mt-3 hidden gap-2 lg:flex">
           <button
             type="button"
-            onClick={dismissCoachingPause}
+            onClick={() => { trackEvent('coaching_pause_dismissed'); dismissCoachingPause(); }}
             className="flex-1 animate-pulse-ring rounded bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
             title="Dismiss and let the engine respond"
           >
@@ -154,7 +161,7 @@ export default function CoachPanel() {
           </button>
           <button
             type="button"
-            onClick={tryThisLine}
+            onClick={() => { trackEvent('try_this_move_clicked'); tryThisLine(); }}
             className="flex-1 rounded bg-amber-700/60 px-3 py-2 text-sm font-medium text-amber-50 hover:bg-amber-700"
             title="Fork at the previous position and play the engine's top move instead"
           >
@@ -164,7 +171,7 @@ export default function CoachPanel() {
       ) : showTryThis ? (
         <button
           type="button"
-          onClick={tryThisLine}
+          onClick={() => { trackEvent('try_this_move_clicked'); tryThisLine(); }}
           className="mt-3 hidden w-full rounded bg-amber-700/60 px-3 py-1.5 text-xs font-medium text-amber-50 hover:bg-amber-700 lg:block"
           title="Fork at the previous position and play the engine's top move instead"
         >
@@ -173,7 +180,7 @@ export default function CoachPanel() {
       ) : coachingPaused ? (
         <button
           type="button"
-          onClick={dismissCoachingPause}
+          onClick={() => { trackEvent('coaching_pause_dismissed'); dismissCoachingPause(); }}
           className="mt-3 hidden w-full animate-pulse-ring rounded bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500 lg:block"
           title="Dismiss and let the engine respond"
         >

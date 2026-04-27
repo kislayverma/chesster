@@ -34,6 +34,7 @@ import {
 } from '../sync/migrateAnonymous';
 import { hydrateFromRemote } from '../sync/syncOrchestrator';
 import { loadProfileRemote } from '../sync/remoteProfileStore';
+import { trackEvent } from '../lib/analytics';
 
 type UiState =
   | { kind: 'loading' }
@@ -124,6 +125,7 @@ export default function OnboardingPage() {
     }
     await hydrateFromRemote(user.id);
     persistName();
+    trackEvent('onboarding_completed', { choice: 'migrate', games: result.counts.games, events: result.counts.weaknessEvents });
     setState({
       kind: 'success',
       games: result.counts.games,
@@ -138,6 +140,7 @@ export default function OnboardingPage() {
     await declineMigration(user.id);
     await hydrateFromRemote(user.id);
     persistName();
+    trackEvent('onboarding_completed', { choice: 'fresh' });
     navigate(nextParam, { replace: true });
   };
 
@@ -149,6 +152,7 @@ export default function OnboardingPage() {
     // Persist the name AFTER hydration so we don't overwrite the remote
     // profile with a near-empty local one before it's been pulled down.
     persistName();
+    trackEvent('onboarding_completed', { choice: 'new_user' });
     navigate(nextParam, { replace: true });
   };
 

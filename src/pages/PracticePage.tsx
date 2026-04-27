@@ -17,6 +17,7 @@ import type { Square } from 'react-chessboard/dist/chessboard/types';
 import { NavLink } from 'react-router-dom';
 import { usePracticeStore } from '../srs/practiceStore';
 import type { PracticeCard } from '../srs/types';
+import { trackEvent } from '../lib/analytics';
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -56,6 +57,9 @@ export default function PracticePage() {
         .slice(0, 20);
       setSessionCards(due);
       setInitialized(true);
+      if (due.length > 0) {
+        trackEvent('practice_drill_started', { cardCount: due.length });
+      }
     }
   }, [hydrated, initialized, cards]);
 
@@ -96,6 +100,7 @@ export default function PracticePage() {
         normaliseSan(move.san) === normaliseSan(card.bestMove);
 
       reviewCard(card.id, isCorrect);
+      trackEvent('practice_drill_answered', { correct: isCorrect, motif: card.motifs[0] ?? 'none' });
 
       if (isCorrect) {
         setPhase('correct');

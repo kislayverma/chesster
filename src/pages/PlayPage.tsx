@@ -16,6 +16,7 @@ import StackPanel from '../components/StackPanel';
 import { useGameStore } from '../game/gameStore';
 import { useProfileStore } from '../profile/profileStore';
 import { acplToRating, ratingStanding } from '../lib/rating';
+import { trackEvent } from '../lib/analytics';
 
 export default function PlayPage() {
   const turn = useGameStore((s) => s.turn);
@@ -64,6 +65,26 @@ export default function PlayPage() {
         : `Game over · ${displayResult}`
       : 'Game over'
     : `${turn === 'w' ? 'White' : 'Black'} to move${inCheck ? ' · check' : ''}`;
+
+  // Track game-finished event once.
+  const gameFinishedTracked = useRef(false);
+  useEffect(() => {
+    if (gameFinished && !gameFinishedTracked.current) {
+      gameFinishedTracked.current = true;
+      const latestAcpl = acplHistory.length > 0 ? acplHistory[acplHistory.length - 1].acpl : undefined;
+      trackEvent('game_finished', {
+        result: displayResult ?? undefined,
+        rating: gameRating ?? undefined,
+        acpl: latestAcpl,
+        moves: historyLength,
+        color: humanColor,
+        skillLevel,
+      });
+    }
+    if (!gameFinished) {
+      gameFinishedTracked.current = false;
+    }
+  }, [gameFinished, displayResult, gameRating, acplHistory, historyLength, humanColor, skillLevel]);
 
   // Check if forward navigation is possible (current node has children).
   const canGoForward = tree.nodes.get(currentNodeId)?.childrenIds.length ?? 0 > 0;
@@ -131,6 +152,7 @@ export default function PlayPage() {
           <div
             role="alert"
             className="w-full max-w-[480px] rounded border border-amber-500/60 bg-amber-900/30 px-3 py-2 text-xs text-amber-100"
+            ref={(el) => { if (el) trackEvent('branch_cap_hit'); }}
           >
             Branch limit reached.{' '}
             <NavLink to="/login" className="underline underline-offset-2 hover:text-amber-50">
@@ -174,7 +196,10 @@ export default function PlayPage() {
             <button
               type="button"
               onClick={() => {
-                if (confirm('Resign this game?')) resign();
+                if (confirm('Resign this game?')) {
+                  trackEvent('game_resigned', { moves: historyLength, color: humanColor, skillLevel });
+                  resign();
+                }
               }}
               className="rounded bg-rose-900/60 px-2 py-1 text-rose-200 hover:bg-rose-800/60 lg:px-3"
             >
@@ -183,7 +208,10 @@ export default function PlayPage() {
           )}
           <button
             type="button"
-            onClick={reset}
+            onClick={() => {
+              trackEvent('game_started', { color: humanColor, skillLevel });
+              reset();
+            }}
             className="rounded bg-slate-800 px-2 py-1 text-slate-200 hover:bg-slate-700 lg:px-3"
           >
             New game
@@ -214,7 +242,7 @@ export default function PlayPage() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setHumanColor('w')}
+                  onClick={() => { trackEvent('color_changed', { color: 'w' }); setHumanColor('w'); }}
                   className={`flex-1 rounded px-2 py-1 text-xs ${
                     humanColor === 'w'
                       ? 'bg-slate-200 text-slate-900'
@@ -225,7 +253,7 @@ export default function PlayPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setHumanColor('b')}
+                  onClick={() => { trackEvent('color_changed', { color: 'b' }); setHumanColor('b'); }}
                   className={`flex-1 rounded px-2 py-1 text-xs ${
                     humanColor === 'b'
                       ? 'bg-slate-200 text-slate-900'
@@ -250,7 +278,12 @@ export default function PlayPage() {
                 max={20}
                 step={1}
                 value={skillLevel}
-                onChange={(e) => setSkillLevel(parseInt(e.target.value, 10))}
+                onChange={(e) => {
+                  const newLevel = parseInt(e.target.value, 10);
+                  setSkillLevel(newLevel);
+                }}
+                onMouseUp={() => trackEvent('skill_level_changed', { skillLevel })}
+                onTouchEnd={() => trackEvent('skill_level_changed', { skillLevel })}
                 className="w-full accent-slate-400"
               />
               <div className="mt-1 flex justify-between text-[10px] text-slate-500">
@@ -286,7 +319,7 @@ export default function PlayPage() {
       >
         <button
           type="button"
-          onClick={dismissCoachingPause}
+          onClick={() => { trackEvent('coaching_pause_dismissed'); dismissCoachingPause(); }}
           className="flex-1 animate-pulse-ring rounded bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500"
         >
           Continue
@@ -294,7 +327,7 @@ export default function PlayPage() {
         {showMobileTryThis && (
           <button
             type="button"
-            onClick={tryThisLine}
+            onClick={() => { trackEvent('try_this_move_clicked'); tryThisLine(); }}
             className="flex-1 rounded bg-amber-700/60 px-3 py-2.5 text-sm font-medium text-amber-50 hover:bg-amber-700"
           >
             Try this move

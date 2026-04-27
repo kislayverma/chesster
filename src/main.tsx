@@ -8,6 +8,7 @@ import { usePracticeStore } from './srs/practiceStore';
 import { initLlmMode } from './lib/featureFlags';
 import { useAuthStore } from './auth/authStore';
 import { initSyncOrchestrator } from './sync/syncOrchestrator';
+import { initAnalytics } from './lib/analytics';
 
 // Kick off profile hydration before the first render so the dashboard
 // doesn't flash an empty state on reload. The store starts in a
@@ -31,6 +32,10 @@ void initLlmMode();
 // and short-circuits on unconfigured deployments.
 initSyncOrchestrator();
 void useAuthStore.getState().initialize();
+
+// Phase 11: bootstrap analytics (GA4 + Mixpanel). No-ops gracefully
+// when env vars are absent.
+initAnalytics();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -25,6 +25,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../auth/authStore';
 import { isAlreadyMigrated } from '../sync/migrateAnonymous';
+import { trackEvent, identify } from '../lib/analytics';
 
 export default function LoginPage() {
   const status = useAuthStore((s) => s.status);
@@ -52,6 +53,8 @@ export default function LoginPage() {
   // or the requested `next` page.
   useEffect(() => {
     if (status !== 'authenticated' || !user) return;
+    // Associate analytics events with this user.
+    identify(user.id);
     let cancelled = false;
     void isAlreadyMigrated(user.id).then((claimed) => {
       if (cancelled) return;
@@ -81,6 +84,7 @@ export default function LoginPage() {
     const trimmed = email.trim();
     if (!trimmed || !/.+@.+\..+/.test(trimmed)) return;
     setSending(true);
+    trackEvent('sign_in_started');
     try {
       const ok = await signInWithEmail(trimmed);
       if (ok) setCodeSent(true);
@@ -98,6 +102,7 @@ export default function LoginPage() {
       await verifyOtp(email.trim(), trimmed);
       // On success, onAuthStateChange fires and the effect above
       // handles the redirect. On failure, lastError is set.
+      trackEvent('sign_in_completed');
     } finally {
       setVerifying(false);
     }

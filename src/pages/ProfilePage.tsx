@@ -15,6 +15,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../auth/authStore';
 import { useProfileStore } from '../profile/profileStore';
 import { acplToRating, ratingStanding } from '../lib/rating';
+import { trackEvent } from '../lib/analytics';
 import {
   getTopWeaknesses,
   getRetiredWeaknesses,
@@ -134,6 +135,19 @@ export default function ProfilePage() {
     );
   }
 
+  // Track that the profile was viewed with meaningful data.
+  useEffect(() => {
+    if (totalGames > 0) {
+      trackEvent('profile_viewed', {
+        totalGames,
+        level: profile.journeyState?.currentLevel ?? 'unknown',
+        rating: profile.journeyState?.rollingRating ?? 0,
+      });
+    }
+  // Fire once per mount, not on every profile change.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Average and latest ratings derived from ACPL.
   const avgAcpl =
     acplHistory.length > 0
@@ -174,6 +188,7 @@ export default function ProfilePage() {
           type="button"
           onClick={() => {
             if (confirm('Clear your entire profile? This cannot be undone.')) {
+              trackEvent('profile_cleared');
               clearProfile();
             }
           }}

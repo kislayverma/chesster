@@ -7,6 +7,7 @@ import { useProfileStore } from '../profile/profileStore';
 import { getLevelDef } from '../lib/rating';
 import { levelFocusAreas } from '../lib/journey';
 import { MOTIF_LABELS, type MotifId } from '../tagging/motifs';
+import { trackEvent } from '../lib/analytics';
 
 export default function PromotionBanner() {
   const journey = useProfileStore((s) => s.profile.journeyState);
@@ -22,7 +23,7 @@ export default function PromotionBanner() {
     <div className="relative rounded-lg border border-emerald-500/40 bg-emerald-900/20 p-5">
       <button
         type="button"
-        onClick={dismiss}
+        onClick={() => { trackEvent('promotion_banner_dismissed', { level: level.key }); dismiss(); }}
         className="absolute right-3 top-3 text-sm text-slate-400 hover:text-slate-200"
         title="Dismiss"
       >

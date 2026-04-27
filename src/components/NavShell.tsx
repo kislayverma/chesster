@@ -12,6 +12,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useEffect, useState, createContext, useContext } from 'react';
 import { getLlmMode, subscribeLlmMode, type LlmMode } from '../lib/featureFlags';
 import { useAuthStore } from '../auth/authStore';
+import { trackEvent, resetAnalytics } from '../lib/analytics';
 
 /** Context to tell AuthMenu whether it's rendering inside the burger dropdown. */
 const BurgerContext = createContext(false);
@@ -195,7 +196,7 @@ function AuthMenu() {
           </span>
           <button
             type="button"
-            onClick={() => void signOut()}
+            onClick={() => { trackEvent('sign_out'); resetAnalytics(); void signOut(); }}
             className="rounded px-3 py-2 text-left text-sm text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
           >
             Sign out
@@ -223,7 +224,7 @@ function AuthMenu() {
         </span>
         <button
           type="button"
-          onClick={() => void signOut()}
+          onClick={() => { trackEvent('sign_out'); resetAnalytics(); void signOut(); }}
           className="hidden rounded bg-slate-800 px-2 py-1 text-xs text-slate-400 hover:bg-slate-700 hover:text-slate-200 lg:inline-block"
         >
           Sign out

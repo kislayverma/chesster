@@ -16,6 +16,7 @@ import {
   looksLikeAnthropicKey,
   setByokKey,
 } from '../lib/byokStorage';
+import { trackEvent } from '../lib/analytics';
 import {
   getLlmMode,
   isByokInvalid,
@@ -92,6 +93,7 @@ export default function SettingsPage() {
       // Persist the key to Supabase so it survives sign-out / sign-in
       // cycles and is available on other devices.
       pushByokKeyRemote(candidate);
+      trackEvent('byok_key_saved');
       setInput('');
       setStatus('Key saved. Play a move to see Claude-powered coaching.');
     } finally {
@@ -106,6 +108,7 @@ export default function SettingsPage() {
       // Permanently delete from Supabase — the user explicitly chose
       // to remove their key.
       removeByokKeyRemote();
+      trackEvent('byok_key_cleared');
       setInput('');
       setStatus('Key removed. Coach fell back to rule-based templates.');
     } finally {
@@ -271,6 +274,7 @@ function DataManagementCard() {
   }, []);
 
   const exportProfile = useCallback(() => {
+    trackEvent('data_exported');
     const json = JSON.stringify(profile, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -291,6 +295,7 @@ function DataManagementCard() {
     ) {
       return;
     }
+    trackEvent('all_data_cleared');
     clearProfile();
     // Clear all localforage entries (games + index).
     try {

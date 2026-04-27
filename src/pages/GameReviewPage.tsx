@@ -26,6 +26,7 @@ import EvalChart from '../components/EvalChart';
 import { hasLLM, withByokHeader } from '../lib/featureFlags';
 import { getCurrentProfileSummary } from '../profile/profileStore';
 import { acplToRating, ratingStanding } from '../lib/rating';
+import { trackEvent } from '../lib/analytics';
 
 const LAST_MOVE_STYLE: Record<string, string | number> = {
   backgroundColor: 'rgba(255, 255, 0, 0.3)',
@@ -69,6 +70,7 @@ export default function GameReviewPage() {
         setError('Game not found.');
       } else {
         setGame(g);
+        trackEvent('game_review_opened', { gameId, isFinished: g.finishedAt != null });
       }
       setLoading(false);
     });

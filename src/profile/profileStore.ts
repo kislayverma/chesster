@@ -28,6 +28,7 @@ import { pushProfileRemote } from '../sync/syncOrchestrator';
 import { processMistakeReview } from '../lib/journey';
 import { skillLevelForLevel } from '../lib/rating';
 import { useGameStore } from '../game/gameStore';
+import { trackEvent } from '../lib/analytics';
 
 const STORAGE_KEY = 'chesster:profile:v1';
 const SAVE_DEBOUNCE_MS = 500;
@@ -176,6 +177,11 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
     const prevLevel = prev.journeyState?.currentLevel;
     const nextLevel = next.journeyState?.currentLevel;
     if (nextLevel && nextLevel !== prevLevel) {
+      trackEvent('level_promoted', {
+        newLevel: nextLevel,
+        oldLevel: prevLevel ?? 'none',
+        gamesPlayed: next.totalGames,
+      });
       useGameStore.getState().setSkillLevel(
         skillLevelForLevel(nextLevel),
       );

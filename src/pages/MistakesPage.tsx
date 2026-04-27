@@ -11,6 +11,7 @@ import { MOTIF_IDS, MOTIF_LABELS, type MotifId } from '../tagging/motifs';
 import type { GamePhase } from '../tagging/phaseDetector';
 import { QUALITY_COLORS, QUALITY_LABELS } from '../game/moveClassifier';
 import type { WeaknessEvent } from '../profile/types';
+import { trackEvent } from '../lib/analytics';
 
 type MotifFilter = 'all' | MotifId;
 type PhaseFilter = 'all' | GamePhase;
@@ -106,7 +107,7 @@ export default function MistakesPage() {
           </label>
           <select
             value={motifFilter}
-            onChange={(e) => setMotifFilter(e.target.value as MotifFilter)}
+            onChange={(e) => { const v = e.target.value as MotifFilter; setMotifFilter(v); trackEvent('mistake_filter_applied', { motifFilter: v, phaseFilter }); }}
             className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
           >
             <option value="all">All motifs</option>
@@ -124,7 +125,7 @@ export default function MistakesPage() {
           </label>
           <select
             value={phaseFilter}
-            onChange={(e) => setPhaseFilter(e.target.value as PhaseFilter)}
+            onChange={(e) => { const v = e.target.value as PhaseFilter; setPhaseFilter(v); trackEvent('mistake_filter_applied', { motifFilter, phaseFilter: v }); }}
             className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200"
           >
             {PHASE_FILTERS.map((p) => (
@@ -154,6 +155,7 @@ export default function MistakesPage() {
                   <li key={e.id}>
                     <NavLink
                       to={reviewUrl(e)}
+                      onClick={() => trackEvent('mistake_reviewed', { motif: e.motifs[0] ?? 'none', quality: e.quality, phase: e.phase })}
                       className="group block rounded border border-slate-800 bg-slate-900/60 p-3 text-xs transition-colors hover:border-slate-700 hover:bg-slate-900/80"
                     >
                       <div className="mb-1 flex flex-wrap items-center gap-2">
