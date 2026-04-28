@@ -18,7 +18,6 @@ import { trackEvent, resetAnalytics } from '../lib/analytics';
 const BurgerContext = createContext(false);
 
 const NAV_LINKS: Array<{ to: string; label: string }> = [
-  { to: '/', label: 'Home' },
   { to: '/play', label: 'Play' },
   { to: '/mistakes', label: 'Mistakes' },
   { to: '/practice', label: 'Practice' },
@@ -42,6 +41,12 @@ const LLM_BADGE_CLASSES: Record<LlmMode, string> = {
 export default function NavShell() {
   const [llmMode, setLlmMode] = useState<LlmMode>(getLlmMode());
   const [menuOpen, setMenuOpen] = useState(false);
+  const authStatus = useAuthStore((s) => s.status);
+
+  // Anonymous users see no nav links (just the knight logo + Sign in);
+  // authenticated and unconfigured (local dev) users see the full nav.
+  const isLoggedIn = authStatus === 'authenticated' || authStatus === 'unconfigured';
+  const visibleLinks = isLoggedIn ? NAV_LINKS : [];
 
   useEffect(() => subscribeLlmMode(setLlmMode), []);
 
@@ -50,11 +55,11 @@ export default function NavShell() {
       <header className="border-b border-slate-800 px-4 py-3 lg:px-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4 lg:items-baseline lg:gap-6">
-            <h1 className="text-xl font-bold tracking-tight">altmove</h1>
+            <NavLink to="/" className="text-3xl leading-none" aria-label="Home">♞</NavLink>
 
             {/* Desktop nav */}
             <nav className="hidden items-center gap-1 text-sm lg:flex">
-              {NAV_LINKS.map((link) => (
+              {visibleLinks.map((link) => (
                 <NavLink
                   key={link.to}
                   to={link.to}
@@ -74,16 +79,19 @@ export default function NavShell() {
           </div>
 
           <div className="flex items-center gap-2">
-            <NavLink
-              to="/settings"
-              title="Click to manage your Anthropic API key"
-              className={`hidden rounded px-2 py-1 text-xs transition-colors lg:inline-block ${LLM_BADGE_CLASSES[llmMode]}`}
-            >
-              {LLM_BADGE_LABELS[llmMode]}
-            </NavLink>
+            {isLoggedIn && (
+              <NavLink
+                to="/settings"
+                title="Click to manage your Anthropic API key"
+                className={`hidden rounded px-2 py-1 text-xs transition-colors lg:inline-block ${LLM_BADGE_CLASSES[llmMode]}`}
+              >
+                {LLM_BADGE_LABELS[llmMode]}
+              </NavLink>
+            )}
             <AuthMenu />
 
-            {/* Hamburger button — mobile only */}
+            {/* Hamburger button — mobile only (hidden for anonymous users) */}
+            {isLoggedIn && (
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
@@ -104,13 +112,14 @@ export default function NavShell() {
                 )}
               </svg>
             </button>
+            )}
           </div>
         </div>
 
         {/* Mobile dropdown menu */}
-        {menuOpen && (
+        {menuOpen && isLoggedIn && (
           <nav className="mt-3 flex flex-col gap-1 border-t border-slate-800 pt-3 lg:hidden">
-            {NAV_LINKS.map((link) => (
+            {visibleLinks.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}
