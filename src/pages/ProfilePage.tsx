@@ -22,7 +22,7 @@ import {
 } from '../profile/weaknessSelector';
 import { computePlayerNarrative } from '../profile/playerNarrative';
 import { MOTIF_LABELS, type MotifId } from '../tagging/motifs';
-import type { OpeningStat } from '../profile/types';
+import type { OpeningStat, StreaksState } from '../profile/types';
 import JourneyCard from '../components/JourneyCard';
 import { hasLLM, withByokHeader } from '../lib/featureFlags';
 
@@ -212,6 +212,9 @@ export default function ProfilePage() {
 
       {/* Journey section — only for authenticated users */}
       {isAuthenticated && <JourneyCard />}
+
+      {/* Streaks & Weekly Goals */}
+      {profile.streaksState && <StreaksAndGoals streaks={profile.streaksState} />}
 
       {/* Summary stats */}
       <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -493,5 +496,128 @@ function OpeningCard({
         <span>~{ecoRating} rating</span>
       </div>
     </div>
+  );
+}
+
+const GAME_TARGET_OPTIONS = [3, 5, 7, 10, 14];
+const REVIEW_TARGET_OPTIONS = [5, 10, 15, 20, 30];
+
+function StreaksAndGoals({ streaks }: { streaks: StreaksState }) {
+  const setWeeklyTargets = useProfileStore((s) => s.setWeeklyTargets);
+  const active = streaks.currentStreak > 0;
+
+  const gamePct = Math.min(
+    100,
+    Math.round((streaks.weeklyGamesPlayed / streaks.weeklyGameTarget) * 100),
+  );
+  const reviewPct = Math.min(
+    100,
+    Math.round((streaks.weeklyReviewsDone / streaks.weeklyReviewTarget) * 100),
+  );
+  const gamesDone = gamePct >= 100;
+  const reviewsDone = reviewPct >= 100;
+
+  return (
+    <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+      <h2 className="mb-3 text-sm font-semibold text-slate-200">
+        Streaks & Weekly Goals
+      </h2>
+
+      {/* Streak row */}
+      <div className="mb-4 flex items-center gap-3">
+        <span className={`text-2xl ${active ? 'grayscale-0' : 'grayscale'}`}>
+          {'\uD83D\uDD25'}
+        </span>
+        <div>
+          <span
+            className={`text-sm font-semibold ${
+              active ? 'text-amber-400' : 'text-slate-500'
+            }`}
+          >
+            {streaks.currentStreak} day{streaks.currentStreak !== 1 ? 's' : ''} streak
+          </span>
+          {streaks.longestStreak > 0 && (
+            <span className="ml-2 text-[11px] text-slate-500">
+              Best: {streaks.longestStreak} day{streaks.longestStreak !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Weekly goals */}
+      <div className="flex flex-col gap-3">
+        {/* Games goal */}
+        <div>
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span className="text-slate-400">
+              {gamesDone ? '\u2713 ' : ''}Games this week
+            </span>
+            <div className="flex items-center gap-2">
+              <span className={gamesDone ? 'font-semibold text-emerald-400' : 'text-slate-500'}>
+                {streaks.weeklyGamesPlayed}/{streaks.weeklyGameTarget}
+              </span>
+              <select
+                value={streaks.weeklyGameTarget}
+                onChange={(e) =>
+                  setWeeklyTargets(Number(e.target.value), streaks.weeklyReviewTarget)
+                }
+                className="rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-300 outline-none hover:border-slate-600"
+                title="Set weekly games goal"
+              >
+                {GAME_TARGET_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    Goal: {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="h-2 rounded-full bg-slate-800">
+            <div
+              className={`h-full rounded-full transition-all ${
+                gamesDone ? 'bg-emerald-500' : 'bg-sky-500'
+              }`}
+              style={{ width: `${gamePct}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Reviews goal */}
+        <div>
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span className="text-slate-400">
+              {reviewsDone ? '\u2713 ' : ''}Reviews this week
+            </span>
+            <div className="flex items-center gap-2">
+              <span className={reviewsDone ? 'font-semibold text-emerald-400' : 'text-slate-500'}>
+                {streaks.weeklyReviewsDone}/{streaks.weeklyReviewTarget}
+              </span>
+              <select
+                value={streaks.weeklyReviewTarget}
+                onChange={(e) =>
+                  setWeeklyTargets(streaks.weeklyGameTarget, Number(e.target.value))
+                }
+                className="rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-300 outline-none hover:border-slate-600"
+                title="Set weekly reviews goal"
+              >
+                {REVIEW_TARGET_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    Goal: {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="h-2 rounded-full bg-slate-800">
+            <div
+              className={`h-full rounded-full transition-all ${
+                reviewsDone ? 'bg-emerald-500' : 'bg-sky-500'
+              }`}
+              style={{ width: `${reviewPct}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }

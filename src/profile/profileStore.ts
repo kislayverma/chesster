@@ -70,6 +70,9 @@ interface ProfileStore {
   /** Set the player's display name (from onboarding). */
   setDisplayName: (name: string) => void;
 
+  /** Update weekly game and review targets. */
+  setWeeklyTargets: (gameTarget: number, reviewTarget: number) => void;
+
   /** Trimmed projection sent to the coach for personalization. */
   getProfileSummary: () => ProfileSummary;
 }
@@ -282,6 +285,22 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
     set({ profile: next });
     void saveProfile(next);
     pushProfileRemote(next);
+  },
+
+  setWeeklyTargets: (gameTarget, reviewTarget) => {
+    const profile = get().profile;
+    const streaksState = profile.streaksState ?? createEmptyStreaksState();
+    const next: PlayerProfile = {
+      ...profile,
+      streaksState: {
+        ...streaksState,
+        weeklyGameTarget: Math.max(1, gameTarget),
+        weeklyReviewTarget: Math.max(1, reviewTarget),
+      },
+      updatedAt: Date.now(),
+    };
+    set({ profile: next });
+    scheduleSave(next);
   },
 
   getProfileSummary: () => buildProfileSummary(get().profile),
