@@ -26,6 +26,7 @@ import type { PlayerProfile, WeaknessEvent } from './types';
 import type { ProfileSummary } from '../coach/types';
 import { pushProfileRemote } from '../sync/syncOrchestrator';
 import { processMistakeReview } from '../lib/journey';
+import { createEmptyStreaksState, processReviewForStreaks, wasStreakBroken } from '../lib/streaks';
 import { skillLevelForLevel } from '../lib/rating';
 import { useGameStore } from '../game/gameStore';
 import { trackEvent } from '../lib/analytics';
@@ -105,6 +106,10 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
         if (!stored.journeyState) {
           stored.journeyState = createEmptyJourneyState();
         }
+        // Backfill streaksState for profiles created before the streaks system.
+        if (!stored.streaksState) {
+          stored.streaksState = createEmptyStreaksState();
+        }
         // Recompute decayed counts so they reflect "now", not last save.
         const refreshed = recomputeAggregates(stored);
         set({ profile: refreshed, hydrated: true });
@@ -145,6 +150,16 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
         next = { ...next, journeyState: local };
       }
     }
+    // Keep local streaks if they are more recent than remote.
+    const localStreaks = get().profile.streaksState;
+    const remoteStreaks = next.streaksState;
+    if (localStreaks && (!remoteStreaks || localStreaks.lastActiveDate > (remoteStreaks.lastActiveDate ?? ''))) {
+      next = { ...next, streaksState: localStreaks };
+    }
+    // Backfill streaksState if absent on remote profile.
+    if (!next.streaksState) {
+      next = { ...next, streaksState: createEmptyStreaksState() };
+    }
     set({ profile: next, hydrated: true });
     // Write straight through to IndexedDB — we JUST pulled this from
     // Supabase, so bouncing it back through `scheduleSave` would
@@ -170,8 +185,30 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
 
   finishGame: (acpl) => {
     const prev = get().profile;
+
+    // Detect streak break before processing (streaks update inside recordGameFinished).
+    const streakBroken = wasStreakBroken(
+      prev.streaksState ?? createEmptyStreaksState(),
+    );
+    if (streakBroken) {
+      trackEvent('streak_broken', {
+        previousStreak: prev.streaksState?.currentStreak ?? 0,
+      });
+    }
+
     const next = recordGameFinished(prev, acpl);
     set({ profile: next });
+
+    // Streak analytics.
+    if (next.streaksState.currentStreak > (prev.streaksState?.currentStreak ?? 0)) {
+      trackEvent('streak_extended', { days: next.streaksState.currentStreak });
+    }
+    // Weekly goal completion.
+    const gs = next.streaksState;
+    if (gs.weeklyGamesPlayed >= gs.weeklyGameTarget &&
+        (prev.streaksState?.weeklyGamesPlayed ?? 0) < gs.weeklyGameTarget) {
+      trackEvent('weekly_goal_completed', { type: 'games' });
+    }
 
     // If the player was promoted, adjust Stockfish to the new level.
     const prevLevel = prev.journeyState?.currentLevel;
@@ -210,14 +247,27 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
 
   recordMistakeReview: () => {
     const profile = get().profile;
+    const now = Date.now();
     const journeyState = profile.journeyState ?? createEmptyJourneyState();
-    const updated = processMistakeReview(journeyState);
+    const updated = processMistakeReview(journeyState, now);
+    const updatedStreaks = processReviewForStreaks(
+      profile.streaksState ?? createEmptyStreaksState(now),
+      now,
+    );
     const next: PlayerProfile = {
       ...profile,
       journeyState: updated,
-      updatedAt: Date.now(),
+      streaksState: updatedStreaks,
+      updatedAt: now,
     };
     set({ profile: next });
+
+    // Weekly review goal completion.
+    if (updatedStreaks.weeklyReviewsDone >= updatedStreaks.weeklyReviewTarget &&
+        (profile.streaksState?.weeklyReviewsDone ?? 0) < updatedStreaks.weeklyReviewTarget) {
+      trackEvent('weekly_goal_completed', { type: 'reviews' });
+    }
+
     scheduleSave(next);
   },
 

@@ -25,6 +25,7 @@ import type {
 } from './types';
 import type { GamePhase } from '../tagging/phaseDetector';
 import { processGameFinished } from '../lib/journey';
+import { createEmptyStreaksState, processGameForStreaks } from '../lib/streaks';
 
 /** 14 days in milliseconds — decay half-life for motifCounts.decayedCount. */
 export const HALFLIFE_MS = 14 * 24 * 60 * 60 * 1000;
@@ -61,6 +62,7 @@ export function createEmptyProfile(now: number = Date.now()): PlayerProfile {
     openingWeaknesses: {},
     acplHistory: [],
     journeyState: createEmptyJourneyState(),
+    streaksState: createEmptyStreaksState(now),
     createdAt: now,
     updatedAt: now,
   };
@@ -180,11 +182,16 @@ export function recordGameFinished(
     acpl,
     now,
   );
+  const streaksState = processGameForStreaks(
+    profile.streaksState ?? createEmptyStreaksState(now),
+    now,
+  );
   return {
     ...profile,
     totalGames: profile.totalGames + 1,
     acplHistory: newAcplHistory,
     journeyState,
+    streaksState,
     updatedAt: now,
   };
 }

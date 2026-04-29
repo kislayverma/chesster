@@ -10,6 +10,7 @@ import { useAuthStore } from '../auth/authStore';
 import { useProfileStore } from '../profile/profileStore';
 import { ratingStanding, ALL_LEVELS, getLevelDef, nextLevel } from '../lib/rating';
 import { MIN_GAMES_FOR_PROMOTION } from '../lib/journey';
+import type { StreaksState } from '../profile/types';
 import PromotionBanner from '../components/PromotionBanner';
 
 /** Chess piece Unicode for each level. */
@@ -29,6 +30,7 @@ export default function HomePage() {
 
   const totalGames = useProfileStore((s) => s.profile.totalGames);
   const journey = useProfileStore((s) => s.profile.journeyState);
+  const streaks = useProfileStore((s) => s.profile.streaksState);
 
   // While the remote profile is being fetched, show a loading state so
   // we don't flash stale data from a previous session.
@@ -59,6 +61,9 @@ export default function HomePage() {
         <h1 className="text-3xl font-extrabold tracking-tight text-slate-100">
           {greeting}, {name}
         </h1>
+
+        {/* Streak badge */}
+        {streaks && <StreakBadge currentStreak={streaks.currentStreak} longestStreak={streaks.longestStreak} />}
 
         {/* Full journey ladder with current level highlighted */}
         <JourneyLadder currentLevel={levelDef.key} />
@@ -91,6 +96,9 @@ export default function HomePage() {
               : 'You\'ve reached the top!'}
           </p>
         </div>
+
+        {/* Weekly goals */}
+        {streaks && <WeeklyGoals streaks={streaks} />}
 
         {/* Play CTA */}
         <NavLink
@@ -204,6 +212,98 @@ function JourneyLadder({ currentLevel }: { currentLevel?: string }) {
         <div className="h-px flex-1 bg-slate-700" />
       </div>
     </section>
+  );
+}
+
+function StreakBadge({
+  currentStreak,
+  longestStreak,
+}: {
+  currentStreak: number;
+  longestStreak: number;
+}) {
+  const active = currentStreak > 0;
+  return (
+    <div className="flex items-center gap-2">
+      <span className={`text-2xl ${active ? 'grayscale-0' : 'grayscale'}`}>
+        {'\uD83D\uDD25'}
+      </span>
+      <div className="flex flex-col">
+        <span
+          className={`text-sm font-semibold ${
+            active ? 'text-amber-400' : 'text-slate-500'
+          }`}
+        >
+          {currentStreak} day{currentStreak !== 1 ? 's' : ''} streak
+        </span>
+        {longestStreak > 0 && (
+          <span className="text-[11px] text-slate-500">
+            Best: {longestStreak} day{longestStreak !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WeeklyGoals({ streaks }: { streaks: StreaksState }) {
+  const gamePct = Math.min(
+    100,
+    Math.round((streaks.weeklyGamesPlayed / streaks.weeklyGameTarget) * 100),
+  );
+  const reviewPct = Math.min(
+    100,
+    Math.round((streaks.weeklyReviewsDone / streaks.weeklyReviewTarget) * 100),
+  );
+  const gamesDone = gamePct >= 100;
+  const reviewsDone = reviewPct >= 100;
+
+  return (
+    <div className="w-full max-w-sm rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+      <h3 className="mb-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
+        Weekly Goals
+      </h3>
+      <div className="flex flex-col gap-3">
+        {/* Games goal */}
+        <div>
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span className="text-slate-400">
+              {gamesDone ? '\u2713' : ''} Games
+            </span>
+            <span className={gamesDone ? 'font-semibold text-emerald-400' : 'text-slate-500'}>
+              {streaks.weeklyGamesPlayed}/{streaks.weeklyGameTarget}
+            </span>
+          </div>
+          <div className="h-2 rounded-full bg-slate-800">
+            <div
+              className={`h-full rounded-full transition-all ${
+                gamesDone ? 'bg-emerald-500' : 'bg-sky-500'
+              }`}
+              style={{ width: `${gamePct}%` }}
+            />
+          </div>
+        </div>
+        {/* Reviews goal */}
+        <div>
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span className="text-slate-400">
+              {reviewsDone ? '\u2713' : ''} Reviews
+            </span>
+            <span className={reviewsDone ? 'font-semibold text-emerald-400' : 'text-slate-500'}>
+              {streaks.weeklyReviewsDone}/{streaks.weeklyReviewTarget}
+            </span>
+          </div>
+          <div className="h-2 rounded-full bg-slate-800">
+            <div
+              className={`h-full rounded-full transition-all ${
+                reviewsDone ? 'bg-emerald-500' : 'bg-sky-500'
+              }`}
+              style={{ width: `${reviewPct}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -96,6 +96,31 @@ export interface JourneyState {
 }
 
 /**
+ * Engagement state — daily streaks and weekly goals.
+ * Stored separately from JourneyState (which owns skill progression)
+ * so the two concerns evolve independently.
+ */
+export interface StreaksState {
+  /** Consecutive days with at least one game or review. */
+  currentStreak: number;
+  /** All-time longest streak. */
+  longestStreak: number;
+  /** ISO date (YYYY-MM-DD) of the most recent activity. */
+  lastActiveDate: string;
+
+  /** ISO Monday date (YYYY-MM-DD) for weekly reset detection. */
+  weekStartDate: string;
+  /** Games completed this week. */
+  weeklyGamesPlayed: number;
+  /** Mistakes reviewed this week. */
+  weeklyReviewsDone: number;
+  /** Target games per week (user-configurable later). */
+  weeklyGameTarget: number;
+  /** Target reviews per week (user-configurable later). */
+  weeklyReviewTarget: number;
+}
+
+/**
  * Persistent, per-user (currently anonymous / device-local) profile.
  * The event log is the source of truth — aggregates are derived and
  * can be recomputed from `weaknessEvents` at any time (see
@@ -112,6 +137,8 @@ export interface PlayerProfile {
   acplHistory: AcplHistoryEntry[];
   /** Journey progression state (authenticated users only). */
   journeyState: JourneyState;
+  /** Engagement streaks and weekly goals. */
+  streaksState: StreaksState;
   createdAt: number;
   updatedAt: number;
 }

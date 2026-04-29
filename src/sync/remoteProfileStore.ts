@@ -30,6 +30,7 @@
 
 import { getSupabase } from './supabaseClient';
 import { recomputeAggregates } from '../profile/profileAggregates';
+import { createEmptyStreaksState } from '../lib/streaks';
 import type { PlayerProfile, WeaknessEvent } from '../profile/types';
 import type { MotifId } from '../tagging/motifs';
 import type { MoveQuality } from '../game/moveClassifier';
@@ -51,6 +52,7 @@ interface ProfileRow {
   opening_weaknesses: unknown;
   acpl_history: unknown;
   journey_state: unknown;
+  streaks_state: unknown;
   created_at?: string;
   updated_at: string;
 }
@@ -82,6 +84,7 @@ function profileToRow(p: PlayerProfile, userId: string): ProfileRow {
     opening_weaknesses: p.openingWeaknesses,
     acpl_history: p.acplHistory,
     journey_state: p.journeyState,
+    streaks_state: p.streaksState,
     created_at: new Date(p.createdAt).toISOString(),
     updated_at: new Date(p.updatedAt).toISOString(),
   };
@@ -230,6 +233,9 @@ export async function loadProfileRemote(
           promotionHistory: [{ level: 'newcomer', timestamp: Date.now() }],
           lastPromotionDismissed: true,
         },
+    streaksState: row?.streaks_state && typeof row.streaks_state === 'object'
+      ? (row.streaks_state as PlayerProfile['streaksState'])
+      : createEmptyStreaksState(),
     createdAt: row?.created_at ? Date.parse(row.created_at) : Date.now(),
     updatedAt: row?.updated_at ? Date.parse(row.updated_at) : Date.now(),
   };
