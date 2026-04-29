@@ -4,13 +4,12 @@
  */
 
 import { useProfileStore } from '../profile/profileStore';
-import { getLevelDef, nextLevel, acplToRating, ratingStanding } from '../lib/rating';
+import { getLevelDef, nextLevel, ratingStanding } from '../lib/rating';
 import { levelFocusAreas, MIN_GAMES_FOR_PROMOTION } from '../lib/journey';
 import { MOTIF_LABELS, type MotifId } from '../tagging/motifs';
 
 export default function JourneyCard() {
   const journey = useProfileStore((s) => s.profile.journeyState);
-  const acplHistory = useProfileStore((s) => s.profile.acplHistory);
   const totalGames = useProfileStore((s) => s.profile.totalGames);
 
   if (!journey) return null;
@@ -20,9 +19,6 @@ export default function JourneyCard() {
   const focusMotifs = levelFocusAreas(journey.currentLevel);
   // Guard: no games played yet means 0% progress regardless of stored state.
   const effectiveProgress = totalGames > 0 ? journey.levelProgress : 0;
-
-  // Sparkline: last 10 game ratings
-  const sparkData = acplHistory.slice(-10).map((e) => acplToRating(e.acpl));
 
   const pointsToNext = next
     ? Math.max(0, next.floor - journey.rollingRating)
@@ -83,16 +79,6 @@ export default function JourneyCard() {
         </p>
       )}
 
-      {/* Rating sparkline */}
-      {sparkData.length > 1 && (
-        <div className="mt-4">
-          <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-500">
-            Last {sparkData.length} games
-          </div>
-          <MiniSparkline data={sparkData} />
-        </div>
-      )}
-
       {/* Focus areas */}
       {focusMotifs.length > 0 && (
         <div className="mt-4">
@@ -115,34 +101,3 @@ export default function JourneyCard() {
   );
 }
 
-function MiniSparkline({ data }: { data: number[] }) {
-  const min = Math.min(...data) - 50;
-  const max = Math.max(...data) + 50;
-  const range = max - min || 1;
-  return (
-    <div className="flex items-end gap-0.5" style={{ height: '32px' }}>
-      {data.map((rating, i) => {
-        const pct = Math.max(8, ((rating - min) / range) * 100);
-        const color =
-          rating >= 1800
-            ? 'bg-emerald-500'
-            : rating >= 1200
-              ? 'bg-amber-500'
-              : 'bg-rose-500';
-        return (
-          <div
-            key={i}
-            className="flex flex-1 flex-col items-center justify-end"
-            style={{ height: '100%' }}
-          >
-            <div
-              className={`w-full min-w-[3px] rounded-t ${color}`}
-              style={{ height: `${pct}%` }}
-              title={`~${rating}`}
-            />
-          </div>
-        );
-      })}
-    </div>
-  );
-}
