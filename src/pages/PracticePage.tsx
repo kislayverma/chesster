@@ -13,11 +13,34 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
-import type { Square } from 'react-chessboard/dist/chessboard/types';
+import type {
+  CustomSquareStyles,
+  Piece,
+  Square,
+} from 'react-chessboard/dist/chessboard/types';
 import { NavLink } from 'react-router-dom';
 import { usePracticeStore } from '../srs/practiceStore';
 import type { PracticeCard } from '../srs/types';
 import { trackEvent } from '../lib/analytics';
+
+// ---- click-to-move styles (matches Board.tsx) --------------------------------
+
+/** Dot indicator for legal move targets (empty square). */
+const LEGAL_DOT_STYLE: Record<string, string | number> = {
+  background: 'radial-gradient(circle, rgba(0,0,0,0.25) 25%, transparent 25%)',
+  borderRadius: '50%',
+};
+
+/** Ring indicator for legal move targets (occupied square = capture). */
+const LEGAL_CAPTURE_STYLE: Record<string, string | number> = {
+  background: 'radial-gradient(circle, transparent 55%, rgba(0,0,0,0.25) 55%)',
+  borderRadius: '50%',
+};
+
+/** Highlight for the selected piece's own square. */
+const SELECTED_SQUARE_STYLE: Record<string, string | number> = {
+  backgroundColor: 'rgba(255, 255, 0, 0.45)',
+};
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -141,6 +164,131 @@ export default function PracticePage() {
     return [];
   }, [phase, card]);
 
+  // ---- Click-to-move state --------------------------------------------------
+
+  const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
+  const [legalMoveSquares, setLegalMoveSquares] = useState<CustomSquareStyles>({});
+
+  // Clear selection when the card changes.
+  useEffect(() => {
+    setSelectedSquare(null);
+    setLegalMoveSquares({});
+  }, [currentIndex]);
+
+  /** Show legal move indicators for a piece on the given square. */
+  const highlightLegalMoves = useCallback(
+    (square: Square) => {
+      if (phase !== 'presenting' || !chess) return;
+      if (selectedSquare === square) {
+        setSelectedSquare(null);
+        setLegalMoveSquares({});
+        return;
+      }
+      try {
+        const moves = chess.moves({ square, verbose: true });
+        if (moves.length === 0) {
+          setSelectedSquare(null);
+          setLegalMoveSquares({});
+          return;
+        }
+        // chess.moves is non-destructive on the position so we can
+        // read from the same instance that the card uses.
+        const freshChess = new Chess(card!.fen);
+        const freshMoves = freshChess.moves({ square, verbose: true });
+        const styles: CustomSquareStyles = {
+          [square]: SELECTED_SQUARE_STYLE,
+        };
+        for (const m of freshMoves) {
+          styles[m.to as Square] = m.captured
+            ? LEGAL_CAPTURE_STYLE
+            : LEGAL_DOT_STYLE;
+        }
+        setSelectedSquare(square);
+        setLegalMoveSquares(styles);
+      } catch {
+        setSelectedSquare(null);
+        setLegalMoveSquares({});
+      }
+    },
+    [phase, chess, card, selectedSquare],
+  );
+
+  /**
+   * Execute a move from the selected square to the target square.
+   * Reuses the same validation + review logic as onPieceDrop.
+   */
+  const executeMove = useCallback(
+    (from: string, to: string): boolean => {
+      if (phase !== 'presenting' || !card) return false;
+      // Use a fresh chess instance so the card's chess stays clean.
+      try {
+        const fresh = new Chess(card.fen);
+        const move = fresh.move({ from, to, promotion: 'q' });
+        if (!move) return false;
+
+        setPlayerMoveSan(move.san);
+
+        const isCorrect =
+          normaliseSan(move.san) === normaliseSan(card.bestMove);
+
+        reviewCard(card.id, isCorrect);
+        trackEvent('practice_drill_answered', { correct: isCorrect, motif: card.motifs[0] ?? 'none' });
+
+        if (isCorrect) {
+          setPhase('correct');
+          setStats((s) => ({ ...s, correct: s.correct + 1 }));
+        } else {
+          setPhase('incorrect');
+          setStats((s) => ({ ...s, incorrect: s.incorrect + 1 }));
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [phase, card, reviewCard],
+  );
+
+  /** Click on a square: select a piece or execute a click-to-move. */
+  const onSquareClick = useCallback(
+    (square: Square) => {
+      if (phase !== 'presenting') return;
+      // If a piece is selected and the clicked square is a legal target, move.
+      if (selectedSquare && legalMoveSquares[square]) {
+        executeMove(selectedSquare, square);
+        setSelectedSquare(null);
+        setLegalMoveSquares({});
+        return;
+      }
+      // Otherwise select/deselect the clicked piece.
+      highlightLegalMoves(square);
+    },
+    [phase, selectedSquare, legalMoveSquares, executeMove, highlightLegalMoves],
+  );
+
+  /** Click on a piece: select it or capture if it's a legal target. */
+  const onPieceClick = useCallback(
+    (_piece: Piece, square: Square) => {
+      if (phase !== 'presenting') return;
+      if (selectedSquare && legalMoveSquares[square]) {
+        executeMove(selectedSquare, square);
+        setSelectedSquare(null);
+        setLegalMoveSquares({});
+        return;
+      }
+      highlightLegalMoves(square);
+    },
+    [phase, selectedSquare, legalMoveSquares, executeMove, highlightLegalMoves],
+  );
+
+  const customSquareStyles = useMemo<CustomSquareStyles>(() => {
+    const styles: CustomSquareStyles = {};
+    for (const [sq, style] of Object.entries(legalMoveSquares)) {
+      styles[sq as Square] = { ...(styles[sq as Square] ?? {}), ...style };
+    }
+    return styles;
+  }, [legalMoveSquares]);
+
   // ---- Loading / empty states -----------------------------------------------
 
   if (!hydrated || !initialized) {
@@ -251,8 +399,11 @@ export default function PracticePage() {
           position={fen}
           boardOrientation={orientation}
           onPieceDrop={onPieceDrop}
+          onSquareClick={onSquareClick}
+          onPieceClick={onPieceClick}
           arePiecesDraggable={phase === 'presenting'}
           customArrows={correctArrow as never}
+          customSquareStyles={customSquareStyles}
           customBoardStyle={{
             borderRadius: '8px',
             boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
