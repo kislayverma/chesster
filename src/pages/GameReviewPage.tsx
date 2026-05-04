@@ -18,7 +18,7 @@ import type { GameTree, MoveNode } from '../game/gameTree';
 import type { PersistedGame } from '../profile/types';
 import { useProfileStore } from '../profile/profileStore';
 import { useAuthStore } from '../auth/authStore';
-import { QUALITY_COLORS, QUALITY_LABELS } from '../game/moveClassifier';
+import { classifyMove, QUALITY_COLORS, QUALITY_LABELS, type MoveQuality } from '../game/moveClassifier';
 import { MOTIF_LABELS, type MotifId } from '../tagging/motifs';
 import { computeGameSummary, type GameSummary } from '../game/gameSummary';
 import GameSummaryCard from '../components/GameSummaryCard';
@@ -469,7 +469,11 @@ export default function GameReviewPage() {
       {/* Column 2: Coach + Game info + Summary + Move list */}
       <aside className="flex flex-col gap-4">
         {/* Coach panel — per-move coaching feedback */}
-        <ReviewCoachPanel node={currentNode} humanColor={game.humanColor} />
+        <ReviewCoachPanel
+          node={currentNode}
+          prevNode={plyIndex > 0 ? mainline[plyIndex - 1] : null}
+          humanColor={game.humanColor}
+        />
 
         {/* Game metadata */}
         <div className="rounded border border-slate-800 bg-slate-900/40 p-4">
@@ -703,20 +707,105 @@ function detectPhaseFromFen(fen: string): string | null {
   }
 }
 
+/**
+ * Describe the eval shift from the opponent's perspective to explain
+ * what their move accomplished (or failed to accomplish).
+ */
+function describeOpponentMove(
+  prevNode: MoveNode | null,
+  node: MoveNode,
+  resolvedQuality: MoveQuality | null,
+  resolvedCpLoss: number,
+): string {
+  const moveSan = node.move;
+
+  // Check if it was a capture (simple heuristic: 'x' in SAN).
+  const isCapture = moveSan.includes('x');
+  // Check if it delivers check.
+  const isCheck = moveSan.includes('+') || moveSan.includes('#');
+
+  // Build an explanation based on quality + context.
+  if (resolvedQuality === 'blunder') {
+    return `${moveSan} was a blunder, losing ${(Math.abs(resolvedCpLoss) / 100).toFixed(1)} pawns of advantage. Look for ways to exploit this.`;
+  }
+  if (resolvedQuality === 'mistake') {
+    return `${moveSan} was a mistake — it cost ${(Math.abs(resolvedCpLoss) / 100).toFixed(1)} pawns. The position shifted in your favor.`;
+  }
+  if (resolvedQuality === 'inaccuracy') {
+    return `${moveSan} was a slight inaccuracy. The position is now a bit better for you.`;
+  }
+
+  // Good or better moves — explain the intent.
+  if (isCheck) {
+    return `${moveSan} delivers check, forcing you to respond to the king threat.`;
+  }
+  if (isCapture) {
+    return `${moveSan} captures material.`;
+  }
+
+  // Eval-based narrative when we have numbers.
+  if (prevNode && node.evalCp != null && prevNode.evalCp != null) {
+    const shift = node.evalCp - prevNode.evalCp;
+    const moverIsWhite = node.moverColor === 'w';
+    // Positive shift = good for white. Convert to "good for mover".
+    const moverGain = moverIsWhite ? shift : -shift;
+    if (moverGain > 50) {
+      return `${moveSan} improves their position by ${(moverGain / 100).toFixed(1)} pawns.`;
+    }
+    if (moverGain < -50) {
+      return `${moveSan} weakens their position — an opportunity for you.`;
+    }
+  }
+
+  if (resolvedQuality === 'best' || resolvedQuality === 'excellent') {
+    return `${moveSan} is a strong move — the engine's top choice in this position.`;
+  }
+  if (resolvedQuality === 'good') {
+    return `${moveSan} is a solid move that maintains the balance.`;
+  }
+
+  return `Opponent played ${moveSan}.`;
+}
+
 function ReviewCoachPanel({
   node,
+  prevNode,
   humanColor,
 }: {
   node: MoveNode;
+  prevNode: MoveNode | null;
   humanColor: 'w' | 'b';
 }) {
-  const { quality, motifs, coachText, coachSource, cpLoss, bestMoveBeforeUci } = node;
   const isRoot = node.parentId === null;
   const isHumanMove = node.moverColor === humanColor;
-  const isBad =
-    quality === 'inaccuracy' || quality === 'mistake' || quality === 'blunder';
 
-  const showCp = cpLoss != null && cpLoss > 0 && isBad;
+  // Use stored quality/cpLoss if available; otherwise compute on the fly
+  // from neighboring node evals (covers engine moves in live games).
+  let resolvedQuality = node.quality;
+  let resolvedCpLoss = node.cpLoss ?? 0;
+
+  if (resolvedQuality === null && prevNode && node.moverColor) {
+    const hasEvalBefore = prevNode.evalCp !== null || prevNode.mate !== null;
+    const hasEvalAfter = node.evalCp !== null || node.mate !== null;
+    if (hasEvalBefore && hasEvalAfter) {
+      const result = classifyMove({
+        evalBeforeCp: prevNode.evalCp,
+        evalBeforeMate: prevNode.mate,
+        evalAfterCp: node.evalCp,
+        evalAfterMate: node.mate,
+        moverColor: node.moverColor,
+      });
+      resolvedQuality = result.quality;
+      resolvedCpLoss = result.cpLoss;
+    }
+  }
+
+  const { motifs, coachText, coachSource, bestMoveBeforeUci } = node;
+  const isBad =
+    resolvedQuality === 'inaccuracy' ||
+    resolvedQuality === 'mistake' ||
+    resolvedQuality === 'blunder';
+  const showCp = resolvedCpLoss > 0 && isBad;
   const phase = detectPhaseFromFen(node.fen);
 
   // Starting position — no coaching to show.
@@ -729,20 +818,12 @@ function ReviewCoachPanel({
     );
   }
 
-  // Opponent's move — minimal display.
-  if (!isHumanMove) {
-    return (
-      <div className="rounded border border-slate-800 bg-slate-900/40 p-4">
-        <h2 className="mb-2 text-sm font-semibold text-slate-200">Coach</h2>
-        <p className="text-xs text-slate-500">
-          Opponent played <span className="font-mono text-slate-300">{node.move}</span>
-        </p>
-      </div>
-    );
-  }
-
-  // No analysis data yet (unanalyzed imported game).
-  if (quality === null && node.evalCp === null && node.mate === null) {
+  // No analysis data at all (unanalyzed imported game).
+  if (
+    resolvedQuality === null &&
+    node.evalCp === null &&
+    node.mate === null
+  ) {
     return (
       <div className="rounded border border-slate-800 bg-slate-900/40 p-4">
         <h2 className="mb-2 text-sm font-semibold text-slate-200">Coach</h2>
@@ -751,17 +832,43 @@ function ReviewCoachPanel({
     );
   }
 
+  // Header label differs for human vs opponent moves.
+  const headerLabel = isHumanMove ? 'Coach' : 'Opponent';
+
+  // Build the prose.
+  let prose: React.ReactNode;
+  if (isHumanMove) {
+    if (coachText) {
+      prose = <p className="text-sm leading-relaxed text-slate-200">{coachText}</p>;
+    } else if (isBad && bestMoveBeforeUci) {
+      prose = (
+        <p className="text-sm leading-relaxed text-slate-400">
+          Better was{' '}
+          <span className="font-mono text-emerald-300">{bestMoveBeforeUci}</span>.
+        </p>
+      );
+    } else if (resolvedQuality && !isBad) {
+      prose = <p className="text-sm leading-relaxed text-slate-400">Good move.</p>;
+    } else {
+      prose = <p className="text-sm leading-relaxed text-slate-400">{'\u2014'}</p>;
+    }
+  } else {
+    // Opponent move — explain their motives.
+    const explanation = describeOpponentMove(prevNode, node, resolvedQuality, resolvedCpLoss);
+    prose = <p className="text-sm leading-relaxed text-slate-200">{explanation}</p>;
+  }
+
   return (
     <div className="rounded border border-slate-800 bg-slate-900/40 p-4">
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-200">Coach</h2>
+        <h2 className="text-sm font-semibold text-slate-200">{headerLabel}</h2>
         <div className="flex items-center gap-2">
-          {quality && phase && (
+          {resolvedQuality && phase && (
             <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-500">
               {phase}
             </span>
           )}
-          {coachSource && (
+          {isHumanMove && coachSource && (
             <span className="text-[10px] uppercase tracking-wider text-slate-500">
               {coachSource}
             </span>
@@ -771,14 +878,14 @@ function ReviewCoachPanel({
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {/* Quality badge */}
-        {quality && (
+        {resolvedQuality && (
           <span
-            className={`rounded px-2 py-0.5 text-xs font-semibold ${QUALITY_COLORS[quality]}`}
+            className={`rounded px-2 py-0.5 text-xs font-semibold ${QUALITY_COLORS[resolvedQuality]}`}
           >
-            {QUALITY_LABELS[quality]}
+            {QUALITY_LABELS[resolvedQuality]}
             {showCp && (
               <span className="ml-1 font-normal opacity-80">
-                {'\u00B7'} {(cpLoss / 100).toFixed(1)} pawns
+                {'\u00B7'} {(Math.abs(resolvedCpLoss) / 100).toFixed(1)} pawns
               </span>
             )}
           </span>
@@ -796,18 +903,7 @@ function ReviewCoachPanel({
         ))}
       </div>
 
-      {/* Coach prose */}
-      {coachText ? (
-        <p className="text-sm leading-relaxed text-slate-200">{coachText}</p>
-      ) : isBad && bestMoveBeforeUci ? (
-        <p className="text-sm leading-relaxed text-slate-400">
-          Better was <span className="font-mono text-emerald-300">{bestMoveBeforeUci}</span>.
-        </p>
-      ) : quality && !isBad ? (
-        <p className="text-sm leading-relaxed text-slate-400">Good move.</p>
-      ) : (
-        <p className="text-sm leading-relaxed text-slate-400">{'\u2014'}</p>
-      )}
+      {prose}
     </div>
   );
 }
