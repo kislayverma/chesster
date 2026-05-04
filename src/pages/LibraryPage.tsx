@@ -16,6 +16,7 @@ import { useProfileStore } from '../profile/profileStore';
 import type { PersistedGameIndexEntry } from '../profile/types';
 import type { GameSource } from '../game/gameTree';
 import { importPgnToTree, buildImportMetadata, determineHumanColor } from '../game/pgnImport';
+import { analyzeImportedGame } from '../game/analyzeImportedGame';
 import { trackEvent } from '../lib/analytics';
 import { pushGameRemote } from '../sync/syncOrchestrator';
 
@@ -452,10 +453,10 @@ function ImportDialog({
 
       let imported = 0;
       let skipped = 0;
+      const total = data.games.length;
 
-      for (let i = 0; i < data.games.length; i++) {
+      for (let i = 0; i < total; i++) {
         const g = data.games[i];
-        setStatus(`Importing game ${i + 1} of ${data.games.length}...`);
 
         // Dedup check.
         if (g.externalId && existingIds.has(g.externalId)) {
@@ -464,6 +465,7 @@ function ImportDialog({
         }
 
         try {
+          setStatus(`Parsing game ${i + 1} of ${total}...`);
           const { tree, headers } = importPgnToTree(g.pgn);
           const metadata = buildImportMetadata(
             headers,
@@ -480,6 +482,10 @@ function ImportDialog({
 
           const humanColor = determineHumanColor(headers, username);
 
+          // Run Stockfish analysis before saving.
+          setStatus(`Analyzing game ${i + 1} of ${total}...`);
+          await analyzeImportedGame(tree);
+
           const persisted = await saveGame({
             tree,
             humanColor,
@@ -494,13 +500,13 @@ function ImportDialog({
             imported++;
           }
         } catch {
-          // Skip games that fail to parse (corrupted PGN, etc.).
+          // Skip games that fail to parse or analyze (corrupted PGN, etc.).
           skipped++;
         }
       }
 
       trackEvent('games_imported', { platform, imported, skipped, month: `${year}-${month}` });
-      setStatus(`Imported ${imported} game${imported !== 1 ? 's' : ''}${skipped > 0 ? `, skipped ${skipped} duplicate${skipped !== 1 ? 's' : ''}` : ''}.`);
+      setStatus(`Imported and analyzed ${imported} game${imported !== 1 ? 's' : ''}${skipped > 0 ? `, skipped ${skipped} duplicate${skipped !== 1 ? 's' : ''}` : ''}.`);
       setBusy(false);
 
       // Auto-close after a short delay on success.
