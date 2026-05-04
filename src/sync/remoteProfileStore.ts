@@ -53,6 +53,7 @@ interface ProfileRow {
   acpl_history: unknown;
   journey_state: unknown;
   streaks_state: unknown;
+  linked_accounts: unknown;
   created_at?: string;
   updated_at: string;
 }
@@ -85,6 +86,7 @@ function profileToRow(p: PlayerProfile, userId: string): ProfileRow {
     acpl_history: p.acplHistory,
     journey_state: p.journeyState,
     streaks_state: p.streaksState,
+    linked_accounts: p.linkedAccounts ?? { chesscom: null, lichess: null },
     created_at: new Date(p.createdAt).toISOString(),
     updated_at: new Date(p.updatedAt).toISOString(),
   };
@@ -236,6 +238,9 @@ export async function loadProfileRemote(
     streaksState: row?.streaks_state && typeof row.streaks_state === 'object'
       ? (row.streaks_state as PlayerProfile['streaksState'])
       : createEmptyStreaksState(),
+    linkedAccounts: row?.linked_accounts && typeof row.linked_accounts === 'object'
+      ? (row.linked_accounts as PlayerProfile['linkedAccounts'])
+      : { chesscom: null, lichess: null },
     createdAt: row?.created_at ? Date.parse(row.created_at) : Date.now(),
     updatedAt: row?.updated_at ? Date.parse(row.updated_at) : Date.now(),
   };
