@@ -466,8 +466,11 @@ export default function GameReviewPage() {
         </div>
       </section>
 
-      {/* Column 2: Game info + Summary + Move list */}
+      {/* Column 2: Coach + Game info + Summary + Move list */}
       <aside className="flex flex-col gap-4">
+        {/* Coach panel — per-move coaching feedback */}
+        <ReviewCoachPanel node={currentNode} humanColor={game.humanColor} />
+
         {/* Game metadata */}
         <div className="rounded border border-slate-800 bg-slate-900/40 p-4">
           <h2 className="text-sm font-semibold text-slate-200">Game Info</h2>
@@ -657,5 +660,154 @@ export default function GameReviewPage() {
         </aside>
       )}
     </main>
+  );
+}
+
+// -----------------------------------------------------------------------
+// ReviewCoachPanel — static coaching feedback from a MoveNode
+// -----------------------------------------------------------------------
+
+/**
+ * Cheap phase detection from FEN for the phase tag display.
+ * Mirrors the logic in tagging/phaseDetector.ts but returns a display string.
+ */
+function detectPhaseFromFen(fen: string): string | null {
+  try {
+    const parts = fen.split(/\s+/);
+    const board = parts[0] ?? '';
+    const fullmove = parseInt(parts[5] ?? '1', 10) || 1;
+
+    let whiteQueens = 0;
+    let blackQueens = 0;
+    let nonKingNonPawnPieces = 0;
+    let nonKingPieces = 0;
+
+    for (const ch of board) {
+      if (ch === '/') continue;
+      if (ch >= '0' && ch <= '9') continue;
+      const upper = ch.toUpperCase();
+      if (upper === 'K') continue;
+      nonKingPieces += 1;
+      if (upper !== 'P') nonKingNonPawnPieces += 1;
+      if (ch === 'Q') whiteQueens += 1;
+      if (ch === 'q') blackQueens += 1;
+    }
+
+    const queensOn = whiteQueens > 0 && blackQueens > 0;
+    if (fullmove <= 10 && queensOn) return 'Opening';
+    if (nonKingNonPawnPieces <= 6) return 'Endgame';
+    if (!queensOn && nonKingPieces <= 10) return 'Endgame';
+    return 'Middlegame';
+  } catch {
+    return null;
+  }
+}
+
+function ReviewCoachPanel({
+  node,
+  humanColor,
+}: {
+  node: MoveNode;
+  humanColor: 'w' | 'b';
+}) {
+  const { quality, motifs, coachText, coachSource, cpLoss, bestMoveBeforeUci } = node;
+  const isRoot = node.parentId === null;
+  const isHumanMove = node.moverColor === humanColor;
+  const isBad =
+    quality === 'inaccuracy' || quality === 'mistake' || quality === 'blunder';
+
+  const showCp = cpLoss != null && cpLoss > 0 && isBad;
+  const phase = detectPhaseFromFen(node.fen);
+
+  // Starting position — no coaching to show.
+  if (isRoot) {
+    return (
+      <div className="rounded border border-slate-800 bg-slate-900/40 p-4 text-xs text-slate-400">
+        <h2 className="mb-2 text-sm font-semibold text-slate-200">Coach</h2>
+        Navigate to a move to see feedback.
+      </div>
+    );
+  }
+
+  // Opponent's move — minimal display.
+  if (!isHumanMove) {
+    return (
+      <div className="rounded border border-slate-800 bg-slate-900/40 p-4">
+        <h2 className="mb-2 text-sm font-semibold text-slate-200">Coach</h2>
+        <p className="text-xs text-slate-500">
+          Opponent played <span className="font-mono text-slate-300">{node.move}</span>
+        </p>
+      </div>
+    );
+  }
+
+  // No analysis data yet (unanalyzed imported game).
+  if (quality === null && node.evalCp === null && node.mate === null) {
+    return (
+      <div className="rounded border border-slate-800 bg-slate-900/40 p-4">
+        <h2 className="mb-2 text-sm font-semibold text-slate-200">Coach</h2>
+        <p className="text-xs text-slate-400">Not yet analyzed.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded border border-slate-800 bg-slate-900/40 p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-200">Coach</h2>
+        <div className="flex items-center gap-2">
+          {quality && phase && (
+            <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-500">
+              {phase}
+            </span>
+          )}
+          {coachSource && (
+            <span className="text-[10px] uppercase tracking-wider text-slate-500">
+              {coachSource}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {/* Quality badge */}
+        {quality && (
+          <span
+            className={`rounded px-2 py-0.5 text-xs font-semibold ${QUALITY_COLORS[quality]}`}
+          >
+            {QUALITY_LABELS[quality]}
+            {showCp && (
+              <span className="ml-1 font-normal opacity-80">
+                {'\u00B7'} {(cpLoss / 100).toFixed(1)} pawns
+              </span>
+            )}
+          </span>
+        )}
+
+        {/* Motif chips */}
+        {motifs.map((m) => (
+          <span
+            key={m}
+            className="rounded bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300"
+            title={MOTIF_LABELS[m as MotifId] ?? m}
+          >
+            {MOTIF_LABELS[m as MotifId] ?? m}
+          </span>
+        ))}
+      </div>
+
+      {/* Coach prose */}
+      {coachText ? (
+        <p className="text-sm leading-relaxed text-slate-200">{coachText}</p>
+      ) : isBad && bestMoveBeforeUci ? (
+        <p className="text-sm leading-relaxed text-slate-400">
+          Better was <span className="font-mono text-emerald-300">{bestMoveBeforeUci}</span>.
+        </p>
+      ) : quality && !isBad ? (
+        <p className="text-sm leading-relaxed text-slate-400">Good move.</p>
+      ) : (
+        <p className="text-sm leading-relaxed text-slate-400">{'\u2014'}</p>
+      )}
+    </div>
   );
 }
