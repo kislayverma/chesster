@@ -73,6 +73,12 @@ interface ProfileStore {
   /** Update weekly game and review targets. */
   setWeeklyTargets: (gameTarget: number, reviewTarget: number) => void;
 
+  /** Link a Chess.com or Lichess username. */
+  setLinkedAccount: (platform: 'chesscom' | 'lichess', username: string) => void;
+
+  /** Unlink a Chess.com or Lichess account. */
+  unlinkAccount: (platform: 'chesscom' | 'lichess') => void;
+
   /** Trimmed projection sent to the coach for personalization. */
   getProfileSummary: () => ProfileSummary;
 }
@@ -297,6 +303,30 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
         weeklyGameTarget: Math.max(1, gameTarget),
         weeklyReviewTarget: Math.max(1, reviewTarget),
       },
+      updatedAt: Date.now(),
+    };
+    set({ profile: next });
+    scheduleSave(next);
+  },
+
+  setLinkedAccount: (platform, username) => {
+    const profile = get().profile;
+    const prev = profile.linkedAccounts ?? { chesscom: null, lichess: null };
+    const next: PlayerProfile = {
+      ...profile,
+      linkedAccounts: { ...prev, [platform]: username },
+      updatedAt: Date.now(),
+    };
+    set({ profile: next });
+    scheduleSave(next);
+  },
+
+  unlinkAccount: (platform) => {
+    const profile = get().profile;
+    const prev = profile.linkedAccounts ?? { chesscom: null, lichess: null };
+    const next: PlayerProfile = {
+      ...profile,
+      linkedAccounts: { ...prev, [platform]: null },
       updatedAt: Date.now(),
     };
     set({ profile: next });

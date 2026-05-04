@@ -12,7 +12,7 @@ import { useParams, useSearchParams, NavLink } from 'react-router-dom';
 import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import type { Arrow, CustomSquareStyles, Square } from 'react-chessboard/dist/chessboard/types';
-import { loadGame, deserializeTree } from '../game/gameStorage';
+import { loadGame, deserializeTree, saveGame } from '../game/gameStorage';
 import { walkMainline } from '../game/gameTree';
 import type { GameTree, MoveNode } from '../game/gameTree';
 import type { PersistedGame } from '../profile/types';
@@ -27,6 +27,7 @@ import { hasLLM, withByokHeader } from '../lib/featureFlags';
 import { getCurrentProfileSummary } from '../profile/profileStore';
 import { acplToRating, ratingStanding } from '../lib/rating';
 import { trackEvent } from '../lib/analytics';
+import { isTreeAnalyzed, analyzeImportedGame, type AnalysisProgress } from '../game/analyzeImportedGame';
 
 const LAST_MOVE_STYLE: Record<string, string | number> = {
   backgroundColor: 'rgba(255, 255, 0, 0.3)',
@@ -54,6 +55,13 @@ export default function GameReviewPage() {
   // Current position index into the mainline node list.
   const [plyIndex, setPlyIndex] = useState(0);
 
+  // On-demand Stockfish analysis state for imported games.
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgress | null>(null);
+  const analysisAbort = useRef<AbortController | null>(null);
+  // Bumped to force re-derivation of tree/mainline after analysis completes.
+  const [analysisVersion, setAnalysisVersion] = useState(0);
+
   // Track whether we've applied the initial ?move= param.
   const appliedInitialMove = useRef(false);
 
@@ -80,18 +88,68 @@ export default function GameReviewPage() {
   const tree: GameTree | null = useMemo(() => {
     if (!game) return null;
     return deserializeTree(game.tree);
-  }, [game]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game, analysisVersion]);
 
   const mainline: MoveNode[] = useMemo(() => {
     if (!tree) return [];
     return Array.from(walkMainline(tree));
   }, [tree]);
 
+  // Detect whether this is an unanalyzed imported game.
+  const needsAnalysis = useMemo(() => {
+    if (!tree || !game) return false;
+    const src = game.source;
+    if (!src || src === 'live') return false;
+    return !isTreeAnalyzed(tree);
+  }, [tree, game]);
+
   // Game summary — computed from mainline tree data.
   const gameSummary: GameSummary | null = useMemo(() => {
     if (!tree || !game) return null;
     return computeGameSummary(tree, game.humanColor);
   }, [tree, game]);
+
+  // Run on-demand Stockfish analysis for imported games.
+  const runAnalysis = useCallback(async () => {
+    if (!tree || !game) return;
+    setAnalyzing(true);
+    setAnalysisProgress(null);
+    const abort = new AbortController();
+    analysisAbort.current = abort;
+    try {
+      await analyzeImportedGame(
+        tree,
+        (p) => setAnalysisProgress(p),
+        abort.signal,
+      );
+      if (!abort.signal.aborted) {
+        // Persist the analyzed tree back to storage.
+        await saveGame({
+          tree,
+          humanColor: game.humanColor,
+          engineEnabled: game.engineEnabled,
+          finishedAt: game.finishedAt,
+          source: game.source,
+          importMetadata: game.importMetadata,
+        });
+        // Bump version to force re-derivation of memos.
+        setAnalysisVersion((v) => v + 1);
+        trackEvent('imported_game_analyzed', { gameId: game.id });
+      }
+    } finally {
+      setAnalyzing(false);
+      setAnalysisProgress(null);
+      analysisAbort.current = null;
+    }
+  }, [tree, game]);
+
+  // Abort analysis on unmount.
+  useEffect(() => {
+    return () => {
+      analysisAbort.current?.abort();
+    };
+  }, []);
 
   // LLM-enriched game summary narrative (optional, async).
   const [llmNarrative, setLlmNarrative] = useState<string | null>(null);
@@ -297,6 +355,58 @@ export default function GameReviewPage() {
           &larr; Back to library
         </NavLink>
 
+        {/* Analysis banner for unanalyzed imported games */}
+        {(needsAnalysis || analyzing) && (
+          <div className="w-full max-w-[480px] rounded border border-amber-500/40 bg-amber-900/20 p-3">
+            {analyzing ? (
+              <div>
+                <p className="text-sm font-medium text-amber-200">
+                  Analyzing with Stockfish...
+                </p>
+                {analysisProgress && (
+                  <div className="mt-2">
+                    <div className="flex items-center justify-between text-xs text-amber-300/80">
+                      <span>Move {analysisProgress.current} of {analysisProgress.total}</span>
+                      <span>{Math.round((analysisProgress.current / analysisProgress.total) * 100)}%</span>
+                    </div>
+                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-amber-900/40">
+                      <div
+                        className="h-full rounded-full bg-amber-500 transition-all"
+                        style={{ width: `${(analysisProgress.current / analysisProgress.total) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => analysisAbort.current?.abort()}
+                  className="mt-2 text-xs text-amber-300/60 underline underline-offset-2 hover:text-amber-200"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-amber-200">
+                    Imported game — not yet analyzed
+                  </p>
+                  <p className="mt-0.5 text-xs text-amber-300/60">
+                    Run Stockfish to see move quality, motifs, and coaching.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void runAnalysis()}
+                  className="rounded bg-amber-600 px-3 py-1.5 text-sm font-medium text-slate-950 hover:bg-amber-500"
+                >
+                  Analyze
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="w-full max-w-[480px]">
           <Chessboard
             position={fen}
@@ -374,8 +484,34 @@ export default function GameReviewPage() {
             <dd className="text-slate-300">{game.mainlinePlies}</dd>
             <dt className="text-slate-500">Opponent</dt>
             <dd className="text-slate-300">
-              {game.engineEnabled ? 'Stockfish' : 'Human'}
+              {game.importMetadata ? (
+                (() => {
+                  const meta = game.importMetadata;
+                  const opponentName = game.humanColor === 'w'
+                    ? meta.blackPlayer
+                    : meta.whitePlayer;
+                  const opponentElo = game.humanColor === 'w'
+                    ? meta.blackElo
+                    : meta.whiteElo;
+                  if (opponentName) {
+                    return opponentElo
+                      ? `${opponentName} (${opponentElo})`
+                      : opponentName;
+                  }
+                  return 'Unknown';
+                })()
+              ) : (
+                game.engineEnabled ? 'Stockfish' : 'Human'
+              )}
             </dd>
+            {game.source && game.source !== 'live' && (
+              <>
+                <dt className="text-slate-500">Source</dt>
+                <dd className="text-slate-300">
+                  {game.source === 'chesscom' ? 'Chess.com' : game.source === 'lichess' ? 'Lichess' : 'PGN'}
+                </dd>
+              </>
+            )}
             {gameSummary && game.finishedAt && (
               <>
                 <dt className="text-slate-500">Your Rating</dt>

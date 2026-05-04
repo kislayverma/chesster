@@ -204,6 +204,51 @@ create index if not exists practice_cards_user_due_idx
 
 alter table public.practice_cards enable row level security;
 
+-- =====================================================================
+-- game import support (Chess.com / Lichess)
+-- =====================================================================
+
+-- Track where a game came from.
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'games' and column_name = 'source'
+  ) then
+    alter table public.games add column source text default 'live'
+      check (source in ('live','chesscom','lichess','pgn_upload'));
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'games' and column_name = 'external_game_id'
+  ) then
+    alter table public.games add column external_game_id text;
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'games' and column_name = 'import_metadata'
+  ) then
+    alter table public.games add column import_metadata jsonb;
+  end if;
+end $$;
+
+create index if not exists games_external_game_idx
+  on public.games (user_id, source, external_game_id);
+
+-- Linked accounts stored as jsonb on profiles.
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'profiles' and column_name = 'linked_accounts'
+  ) then
+    alter table public.profiles add column linked_accounts jsonb
+      not null default '{"chesscom":null,"lichess":null}'::jsonb;
+  end if;
+end $$;
+
 drop policy if exists "practice_cards_select_own" on public.practice_cards;
 create policy "practice_cards_select_own" on public.practice_cards
   for select using (user_id = auth.uid());

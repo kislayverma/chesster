@@ -48,6 +48,24 @@ import { v4 as uuidv4 } from 'uuid';
 import type { MoveQuality } from './moveClassifier';
 import type { MotifId } from '../tagging/motifs';
 
+/** Where a game originated. */
+export type GameSource = 'live' | 'chesscom' | 'lichess' | 'pgn_upload';
+
+/** Metadata for games imported from external platforms. */
+export interface ImportMetadata {
+  source: GameSource;
+  /** Platform-specific game identifier (URL for Chess.com, game ID for Lichess). */
+  externalId?: string;
+  whitePlayer?: string;
+  blackPlayer?: string;
+  whiteElo?: number;
+  blackElo?: number;
+  /** e.g. "600", "180+2", "900+10" */
+  timeControl?: string;
+  /** Epoch ms when the game was originally played. */
+  playedAt?: number;
+}
+
 export interface MoveNode {
   /** Stable id. Root node gets a sentinel id; children get fresh UUIDs. */
   id: string;

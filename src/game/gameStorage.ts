@@ -15,7 +15,7 @@
  */
 
 import localforage from 'localforage';
-import type { GameTree, MoveNode } from './gameTree';
+import type { GameTree, MoveNode, GameSource, ImportMetadata } from './gameTree';
 import type {
   PersistedGame,
   PersistedGameIndexEntry,
@@ -146,6 +146,8 @@ function toIndexEntry(game: PersistedGame): PersistedGameIndexEntry {
     humanColor: game.humanColor,
     engineEnabled: game.engineEnabled,
     ...(qualityCounts ?? {}),
+    ...(game.source ? { source: game.source } : {}),
+    ...(game.importMetadata ? { importMetadata: game.importMetadata } : {}),
   };
 }
 
@@ -182,6 +184,8 @@ export async function saveGame(params: {
   humanColor: 'w' | 'b';
   engineEnabled: boolean;
   finishedAt?: number | null;
+  source?: GameSource;
+  importMetadata?: ImportMetadata;
 }): Promise<PersistedGame | null> {
   const { tree, humanColor, engineEnabled } = params;
   const now = Date.now();
@@ -195,6 +199,8 @@ export async function saveGame(params: {
     engineEnabled,
     humanColor,
     tree: serializeTree(tree),
+    ...(params.source ? { source: params.source } : {}),
+    ...(params.importMetadata ? { importMetadata: params.importMetadata } : {}),
   };
 
   try {

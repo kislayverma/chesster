@@ -13,7 +13,7 @@
 import type { MoveQuality } from '../game/moveClassifier';
 import type { GamePhase } from '../tagging/phaseDetector';
 import type { MotifId } from '../tagging/motifs';
-import type { MoveNode, StackFrame } from '../game/gameTree';
+import type { MoveNode, StackFrame, GameSource, ImportMetadata } from '../game/gameTree';
 
 export type { ProfileSummary } from '../coach/types';
 
@@ -126,6 +126,12 @@ export interface StreaksState {
  * can be recomputed from `weaknessEvents` at any time (see
  * `profileAggregates.ts`).
  */
+/** Linked Chess.com / Lichess usernames for game import. */
+export interface LinkedAccounts {
+  chesscom: string | null;
+  lichess: string | null;
+}
+
 export interface PlayerProfile {
   totalGames: number;
   totalMoves: number;
@@ -139,6 +145,8 @@ export interface PlayerProfile {
   journeyState: JourneyState;
   /** Engagement streaks and weekly goals. */
   streaksState: StreaksState;
+  /** Linked external chess platform accounts. */
+  linkedAccounts?: LinkedAccounts;
   createdAt: number;
   updatedAt: number;
 }
@@ -162,6 +170,10 @@ export interface PersistedGame {
   humanColor: 'w' | 'b';
   /** Full serialized tree. */
   tree: SerializedGameTree;
+  /** Origin of the game. Absent or 'live' for locally-played games. */
+  source?: GameSource;
+  /** Metadata from external platforms (Chess.com, Lichess). */
+  importMetadata?: ImportMetadata;
 }
 
 /**
@@ -206,4 +218,8 @@ export interface PersistedGameIndexEntry {
   inaccuracies?: number;
   /** Human's ACPL for the game (absent on legacy entries). */
   acpl?: number;
+  /** Origin of the game. Absent or 'live' for locally-played games. */
+  source?: GameSource;
+  /** Metadata from external platforms (for display in library cards). */
+  importMetadata?: ImportMetadata;
 }

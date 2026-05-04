@@ -216,6 +216,9 @@ export default function SettingsPage() {
       {/* ─── Engine Defaults ─────────────────────────────────── */}
       <EngineDefaultsCard />
 
+      {/* ─── Linked Accounts ─────────────────────────────────── */}
+      <LinkedAccountsCard />
+
       {/* ─── Data Management ─────────────────────────────────── */}
       <DataManagementCard />
     </main>
@@ -256,6 +259,111 @@ function EngineDefaultsCard() {
           <span>0 (beginner)</span>
           <span>20 (strongest)</span>
         </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Card for linking Chess.com / Lichess accounts for game import.
+ */
+function LinkedAccountsCard() {
+  const linkedAccounts = useProfileStore(
+    (s) => s.profile.linkedAccounts ?? { chesscom: null, lichess: null },
+  );
+  const setLinkedAccount = useProfileStore((s) => s.setLinkedAccount);
+  const unlinkAccount = useProfileStore((s) => s.unlinkAccount);
+
+  const [chesscomInput, setChesscomInput] = useState('');
+  const [lichessInput, setLichessInput] = useState('');
+
+  return (
+    <section className="w-full rounded-lg border border-slate-800 bg-slate-900/40 p-3 md:p-5">
+      <h2 className="text-lg font-semibold text-slate-100">Linked accounts</h2>
+      <p className="mt-2 text-sm leading-relaxed text-slate-400">
+        Connect your Chess.com or Lichess account to import and analyze your games.
+      </p>
+
+      {/* Chess.com */}
+      <div className="mt-4 flex items-center gap-2">
+        <span className="w-24 text-sm font-medium text-slate-300">Chess.com</span>
+        {linkedAccounts.chesscom ? (
+          <>
+            <span className="flex items-center gap-1.5 rounded bg-emerald-900/40 px-2.5 py-1 text-sm text-emerald-200">
+              <span className="text-emerald-400">&#10003;</span>
+              {linkedAccounts.chesscom}
+            </span>
+            <button
+              type="button"
+              onClick={() => unlinkAccount('chesscom')}
+              className="text-xs text-slate-400 underline underline-offset-2 hover:text-slate-200"
+            >
+              Unlink
+            </button>
+          </>
+        ) : (
+          <>
+            <input
+              type="text"
+              value={chesscomInput}
+              onChange={(e) => setChesscomInput(e.target.value)}
+              placeholder="Username"
+              className="w-40 rounded border border-slate-700 bg-slate-950 px-2.5 py-1 text-sm text-slate-100 focus:border-amber-500 focus:outline-none"
+            />
+            <button
+              type="button"
+              disabled={chesscomInput.trim().length === 0}
+              onClick={() => {
+                setLinkedAccount('chesscom', chesscomInput.trim());
+                setChesscomInput('');
+              }}
+              className="rounded bg-slate-800 px-3 py-1 text-sm text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Link
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Lichess */}
+      <div className="mt-3 flex items-center gap-2">
+        <span className="w-24 text-sm font-medium text-slate-300">Lichess</span>
+        {linkedAccounts.lichess ? (
+          <>
+            <span className="flex items-center gap-1.5 rounded bg-emerald-900/40 px-2.5 py-1 text-sm text-emerald-200">
+              <span className="text-emerald-400">&#10003;</span>
+              {linkedAccounts.lichess}
+            </span>
+            <button
+              type="button"
+              onClick={() => unlinkAccount('lichess')}
+              className="text-xs text-slate-400 underline underline-offset-2 hover:text-slate-200"
+            >
+              Unlink
+            </button>
+          </>
+        ) : (
+          <>
+            <input
+              type="text"
+              value={lichessInput}
+              onChange={(e) => setLichessInput(e.target.value)}
+              placeholder="Username"
+              className="w-40 rounded border border-slate-700 bg-slate-950 px-2.5 py-1 text-sm text-slate-100 focus:border-amber-500 focus:outline-none"
+            />
+            <button
+              type="button"
+              disabled={lichessInput.trim().length === 0}
+              onClick={() => {
+                setLinkedAccount('lichess', lichessInput.trim());
+                setLichessInput('');
+              }}
+              className="rounded bg-slate-800 px-3 py-1 text-sm text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Link
+            </button>
+          </>
+        )}
       </div>
     </section>
   );

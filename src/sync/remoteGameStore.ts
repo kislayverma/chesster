@@ -31,10 +31,13 @@ interface GameRow {
   human_color: 'w' | 'b';
   tree: unknown;
   created_at?: string;
+  source?: string;
+  external_game_id?: string | null;
+  import_metadata?: unknown;
 }
 
 function rowToPersisted(row: GameRow): PersistedGame {
-  return {
+  const game: PersistedGame = {
     id: row.id,
     startedAt: Date.parse(row.started_at),
     updatedAt: Date.parse(row.updated_at),
@@ -48,10 +51,17 @@ function rowToPersisted(row: GameRow): PersistedGame {
     // because every write in the app goes through this same module.
     tree: row.tree as PersistedGame['tree'],
   };
+  if (row.source && row.source !== 'live') {
+    game.source = row.source as PersistedGame['source'];
+  }
+  if (row.import_metadata) {
+    game.importMetadata = row.import_metadata as PersistedGame['importMetadata'];
+  }
+  return game;
 }
 
 function rowToIndexEntry(row: GameRow): PersistedGameIndexEntry {
-  return {
+  const entry: PersistedGameIndexEntry = {
     id: row.id,
     startedAt: Date.parse(row.started_at),
     updatedAt: Date.parse(row.updated_at),
@@ -61,6 +71,13 @@ function rowToIndexEntry(row: GameRow): PersistedGameIndexEntry {
     humanColor: row.human_color,
     engineEnabled: row.engine_enabled,
   };
+  if (row.source && row.source !== 'live') {
+    entry.source = row.source as PersistedGameIndexEntry['source'];
+  }
+  if (row.import_metadata) {
+    entry.importMetadata = row.import_metadata as PersistedGameIndexEntry['importMetadata'];
+  }
+  return entry;
 }
 
 function persistedToRow(game: PersistedGame, userId: string): GameRow {
@@ -75,6 +92,9 @@ function persistedToRow(game: PersistedGame, userId: string): GameRow {
     engine_enabled: game.engineEnabled,
     human_color: game.humanColor,
     tree: game.tree,
+    source: game.source ?? 'live',
+    external_game_id: game.importMetadata?.externalId ?? null,
+    import_metadata: game.importMetadata ?? null,
   };
 }
 
