@@ -104,13 +104,22 @@ function computeMainlineAcpl(tree: GameTree, humanColor: 'w' | 'b'): number {
  * there is an authenticated session (the orchestrator no-ops for
  * anonymous users). Errors are swallowed inside both paths.
  */
+/** Tracks the spawnedFromGameId for the current game (set via reset()). */
+let currentSpawnedFromGameId: string | undefined;
+
 function persistTree(
   tree: GameTree,
   humanColor: 'w' | 'b',
   engineEnabled: boolean,
   finishedAt: number | null = null
 ): void {
-  void saveGame({ tree, humanColor, engineEnabled, finishedAt }).then((g) => {
+  void saveGame({
+    tree,
+    humanColor,
+    engineEnabled,
+    finishedAt,
+    ...(currentSpawnedFromGameId ? { spawnedFromGameId: currentSpawnedFromGameId } : {}),
+  }).then((g) => {
     if (g) pushGameRemote(g);
   });
 }
@@ -275,8 +284,8 @@ interface GameStore
    */
   popToFrame: (frameId: string) => void;
 
-  /** Start a fresh game (discards the current tree). */
-  reset: () => void;
+  /** Start a fresh game (discards the current tree). Optionally from a custom FEN, linked to the game it was spawned from. */
+  reset: (opts?: { startingFen?: string; spawnedFromGameId?: string }) => void;
 
   /**
    * Undo the most recent move — move currentNode to parent, or to
@@ -1116,7 +1125,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       kickObservation(snap.fen, snap.turn, seq);
     },
 
-    reset: () => {
+    reset: (opts) => {
       // Persist the outgoing game (whether finished or in progress)
       // before we drop the reference to its tree.
       const prev = get();
@@ -1124,7 +1133,10 @@ export const useGameStore = create<GameStore>((set, get) => {
         persistTree(prev.tree, prev.humanColor, prev.engineEnabled);
       }
 
-      const fresh = createTree();
+      // Track the spawn link for the new game.
+      currentSpawnedFromGameId = opts?.spawnedFromGameId;
+
+      const fresh = createTree(opts?.startingFen);
       analysisSeq += 1;
       const seq = analysisSeq;
       engineNewGame();

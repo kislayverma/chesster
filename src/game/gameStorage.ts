@@ -148,6 +148,7 @@ function toIndexEntry(game: PersistedGame): PersistedGameIndexEntry {
     ...(qualityCounts ?? {}),
     ...(game.source ? { source: game.source } : {}),
     ...(game.importMetadata ? { importMetadata: game.importMetadata } : {}),
+    ...(game.spawnedFromGameId ? { spawnedFromGameId: game.spawnedFromGameId } : {}),
   };
 }
 
@@ -186,6 +187,7 @@ export async function saveGame(params: {
   finishedAt?: number | null;
   source?: GameSource;
   importMetadata?: ImportMetadata;
+  spawnedFromGameId?: string;
 }): Promise<PersistedGame | null> {
   const { tree, humanColor, engineEnabled } = params;
   const now = Date.now();
@@ -201,6 +203,7 @@ export async function saveGame(params: {
     tree: serializeTree(tree),
     ...(params.source ? { source: params.source } : {}),
     ...(params.importMetadata ? { importMetadata: params.importMetadata } : {}),
+    ...(params.spawnedFromGameId ? { spawnedFromGameId: params.spawnedFromGameId } : {}),
   };
 
   try {

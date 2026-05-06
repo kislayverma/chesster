@@ -174,6 +174,8 @@ export interface PersistedGame {
   source?: GameSource;
   /** Metadata from external platforms (Chess.com, Lichess). */
   importMetadata?: ImportMetadata;
+  /** ID of the game this was spawned from (via "Play from here"). */
+  spawnedFromGameId?: string;
 }
 
 /**
@@ -222,4 +224,6 @@ export interface PersistedGameIndexEntry {
   source?: GameSource;
   /** Metadata from external platforms (for display in library cards). */
   importMetadata?: ImportMetadata;
+  /** ID of the game this was spawned from (via "Play from here"). */
+  spawnedFromGameId?: string;
 }

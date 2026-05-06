@@ -34,6 +34,7 @@ interface GameRow {
   source?: string;
   external_game_id?: string | null;
   import_metadata?: unknown;
+  spawned_from_game_id?: string | null;
 }
 
 function rowToPersisted(row: GameRow): PersistedGame {
@@ -57,6 +58,9 @@ function rowToPersisted(row: GameRow): PersistedGame {
   if (row.import_metadata) {
     game.importMetadata = row.import_metadata as PersistedGame['importMetadata'];
   }
+  if (row.spawned_from_game_id) {
+    game.spawnedFromGameId = row.spawned_from_game_id;
+  }
   return game;
 }
 
@@ -77,6 +81,9 @@ function rowToIndexEntry(row: GameRow): PersistedGameIndexEntry {
   if (row.import_metadata) {
     entry.importMetadata = row.import_metadata as PersistedGameIndexEntry['importMetadata'];
   }
+  if (row.spawned_from_game_id) {
+    entry.spawnedFromGameId = row.spawned_from_game_id;
+  }
   return entry;
 }
 
@@ -95,6 +102,7 @@ function persistedToRow(game: PersistedGame, userId: string): GameRow {
     source: game.source ?? 'live',
     external_game_id: game.importMetadata?.externalId ?? null,
     import_metadata: game.importMetadata ?? null,
+    spawned_from_game_id: game.spawnedFromGameId ?? null,
   };
 }
 

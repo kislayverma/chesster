@@ -237,6 +237,17 @@ end $$;
 create index if not exists games_external_game_idx
   on public.games (user_id, source, external_game_id);
 
+-- Track which game a "play from here" game was spawned from.
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'games' and column_name = 'spawned_from_game_id'
+  ) then
+    alter table public.games add column spawned_from_game_id uuid;
+  end if;
+end $$;
+
 -- Linked accounts stored as jsonb on profiles.
 do $$
 begin

@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useSearchParams, NavLink } from 'react-router-dom';
+import { useParams, useSearchParams, NavLink, useNavigate } from 'react-router-dom';
 import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import type { Arrow, CustomSquareStyles, Square } from 'react-chessboard/dist/chessboard/types';
@@ -18,6 +18,7 @@ import type { GameTree, MoveNode } from '../game/gameTree';
 import type { PersistedGame } from '../profile/types';
 import { useProfileStore } from '../profile/profileStore';
 import { useAuthStore } from '../auth/authStore';
+import { useGameStore } from '../game/gameStore';
 import { classifyMove, QUALITY_COLORS, QUALITY_LABELS, type MoveQuality } from '../game/moveClassifier';
 import { MOTIF_LABELS, type MotifId } from '../tagging/motifs';
 import { computeGameSummary, type GameSummary } from '../game/gameSummary';
@@ -48,6 +49,8 @@ function formatDate(ts: number): string {
 export default function GameReviewPage() {
   const { gameId } = useParams<{ gameId: string }>();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const reset = useGameStore((s) => s.reset);
   const [game, setGame] = useState<PersistedGame | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -464,6 +467,19 @@ export default function GameReviewPage() {
             &raquo;
           </button>
         </div>
+
+        {/* Play from this position */}
+        <button
+          type="button"
+          onClick={() => {
+            trackEvent('play_from_here', { gameId: game.id, plyIndex });
+            reset({ startingFen: currentNode.fen, spawnedFromGameId: game.id });
+            navigate('/play');
+          }}
+          className="rounded border border-emerald-600/40 bg-emerald-900/20 px-4 py-1.5 text-sm font-medium text-emerald-300 hover:bg-emerald-900/40"
+        >
+          Play from here
+        </button>
       </section>
 
       {/* Column 2: Coach + Game info + Summary + Move list */}
@@ -516,6 +532,19 @@ export default function GameReviewPage() {
                 <dt className="text-slate-500">Source</dt>
                 <dd className="text-slate-300">
                   {game.source === 'chesscom' ? 'Chess.com' : game.source === 'lichess' ? 'Lichess' : 'PGN'}
+                </dd>
+              </>
+            )}
+            {game.spawnedFromGameId && (
+              <>
+                <dt className="text-slate-500">Spawned from</dt>
+                <dd>
+                  <NavLink
+                    to={`/library/${game.spawnedFromGameId}`}
+                    className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
+                  >
+                    Original game
+                  </NavLink>
                 </dd>
               </>
             )}
