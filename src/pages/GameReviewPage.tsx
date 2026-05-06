@@ -472,8 +472,14 @@ export default function GameReviewPage() {
         <button
           type="button"
           onClick={() => {
+            // The human plays as the side to move at this position.
+            const sideToMove = currentNode.fen.split(/\s+/)[1] === 'b' ? 'b' : 'w';
             trackEvent('play_from_here', { gameId: game.id, plyIndex });
-            reset({ startingFen: currentNode.fen, spawnedFromGameId: game.id });
+            reset({
+              startingFen: currentNode.fen,
+              spawnedFromGameId: game.id,
+              humanColor: sideToMove,
+            });
             navigate('/play');
           }}
           className="rounded border border-emerald-600/40 bg-emerald-900/20 px-4 py-1.5 text-sm font-medium text-emerald-300 hover:bg-emerald-900/40"

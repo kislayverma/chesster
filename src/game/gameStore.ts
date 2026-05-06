@@ -285,7 +285,7 @@ interface GameStore
   popToFrame: (frameId: string) => void;
 
   /** Start a fresh game (discards the current tree). Optionally from a custom FEN, linked to the game it was spawned from. */
-  reset: (opts?: { startingFen?: string; spawnedFromGameId?: string }) => void;
+  reset: (opts?: { startingFen?: string; spawnedFromGameId?: string; humanColor?: 'w' | 'b' }) => void;
 
   /**
    * Undo the most recent move — move currentNode to parent, or to
@@ -1156,9 +1156,12 @@ export const useGameStore = create<GameStore>((set, get) => {
         evalDepth: 0,
         ...EMPTY_COACH_STATE,
         coachingPaused: false,
+        // Apply human color if provided (e.g. "Play from here").
+        ...(opts?.humanColor ? { humanColor: opts.humanColor } : {}),
       });
-      // If the human is black, Stockfish needs to open the game.
-      if (get().engineEnabled && get().humanColor === 'b') {
+      // If it's the engine's turn (side to move ≠ human), kick Stockfish.
+      const state = get();
+      if (state.engineEnabled && snap.turn !== state.humanColor) {
         kickAnalysis(snap.fen, snap.turn, seq);
       }
     },
