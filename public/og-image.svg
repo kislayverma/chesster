@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Accent bar at top -->
+  <rect width="1200" height="4" fill="url(#accent)"/>
+
+  <!-- Decorative chessboard pattern (faded) -->
+  <g opacity="0.06">
+    <rect x="700" y="140" width="60" height="60" fill="#fff"/>
+    <rect x="820" y="140" width="60" height="60" fill="#fff"/>
+    <rect x="940" y="140" width="60" height="60" fill="#fff"/>
+    <rect x="760" y="200" width="60" height="60" fill="#fff"/>
+    <rect x="880" y="200" width="60" height="60" fill="#fff"/>
+    <rect x="1000" y="200" width="60" height="60" fill="#fff"/>
+    <rect x="700" y="260" width="60" height="60" fill="#fff"/>
+    <rect x="820" y="260" width="60" height="60" fill="#fff"/>
+    <rect x="940" y="260" width="60" height="60" fill="#fff"/>
+    <rect x="760" y="320" width="60" height="60" fill="#fff"/>
+    <rect x="880" y="320" width="60" height="60" fill="#fff"/>
+    <rect x="1000" y="320" width="60" height="60" fill="#fff"/>
+    <rect x="700" y="380" width="60" height="60" fill="#fff"/>
+    <rect x="820" y="380" width="60" height="60" fill="#fff"/>
+    <rect x="940" y="380" width="60" height="60" fill="#fff"/>
+  </g>
+
+  <!-- Knight icon -->
+  <text x="80" y="280" font-size="120" font-family="serif" fill="#3b82f6" opacity="0.9">&#9822;</text>
+
+  <!-- App name -->
+  <text x="80" y="370" font-size="72" font-weight="700" font-family="system-ui, -apple-system, sans-serif" fill="#f1f5f9" letter-spacing="-2">altmove</text>
+
+  <!-- Tagline -->
+  <text x="82" y="420" font-size="26" font-family="system-ui, -apple-system, sans-serif" fill="#94a3b8">Learn from every move you play</text>
+
+  <!-- Feature pills -->
+  <g font-size="16" font-family="system-ui, -apple-system, sans-serif">
+    <rect x="80" y="460" width="140" height="32" rx="16" fill="#1e3a5f"/>
+    <text x="150" y="481" fill="#60a5fa" text-anchor="middle">Real-time Coach</text>
+
+    <rect x="236" y="460" width="170" height="32" rx="16" fill="#1e3a5f"/>
+    <text x="321" y="481" fill="#60a5fa" text-anchor="middle">Weakness Tracking</text>
+
+    <rect x="422" y="460" width="150" height="32" rx="16" fill="#1e3a5f"/>
+    <text x="497" y="481" fill="#60a5fa" text-anchor="middle">Stockfish Engine</text>
+  </g>
+
+  <!-- Bottom border -->
+  <rect y="626" width="1200" height="4" fill="url(#accent)"/>
+</svg>
