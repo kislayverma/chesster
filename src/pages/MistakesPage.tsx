@@ -12,6 +12,7 @@ import type { GamePhase } from '../tagging/phaseDetector';
 import { QUALITY_COLORS, QUALITY_LABELS } from '../game/moveClassifier';
 import type { WeaknessEvent } from '../profile/types';
 import { trackEvent } from '../lib/analytics';
+import PageMeta from '../components/PageMeta';
 
 type MotifFilter = 'all' | MotifId;
 type PhaseFilter = 'all' | GamePhase;
@@ -93,6 +94,12 @@ export default function MistakesPage() {
 
   return (
     <main className="mx-auto flex max-w-4xl flex-1 flex-col gap-4 p-3 md:gap-6 md:p-6">
+      <PageMeta
+        title="Mistakes"
+        description="Review your chess mistakes — inaccuracies, blunders, and missed tactics — and learn from them."
+        noIndex
+        canonicalPath="/mistakes"
+      />
       <header>
         <h1 className="text-2xl font-bold text-slate-100">Mistakes</h1>
         <p className="text-sm text-slate-400">

@@ -28,6 +28,7 @@ import { pushByokKeyRemote, removeByokKeyRemote } from '../sync/syncOrchestrator
 import localforage from 'localforage';
 import { useGameStore } from '../game/gameStore';
 import { useProfileStore } from '../profile/profileStore';
+import PageMeta from '../components/PageMeta';
 import { listGames } from '../game/gameStorage';
 
 const MODE_LABELS: Record<LlmMode, string> = {
@@ -118,6 +119,12 @@ export default function SettingsPage() {
 
   return (
     <main className="mx-auto flex max-w-3xl flex-1 flex-col gap-4 p-3 md:gap-6 md:p-6">
+      <PageMeta
+        title="Settings"
+        description="Configure your altmove experience — API keys, engine settings, and data management."
+        noIndex
+        canonicalPath="/settings"
+      />
       <header>
         <h1 className="text-2xl font-bold tracking-tight text-slate-100">Settings</h1>
         <p className="mt-1 text-sm text-slate-400">

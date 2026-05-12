@@ -2,14 +2,25 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♞</text></svg>" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Learn from every move you play. Real-time coaching, weakness tracking, and Stockfish-powered analysis to help you improve at chess." />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#0f172a" />
+
+    <link rel="canonical" href="https://altmove.in/" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♞</text></svg>" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Preconnect to external origins -->
+    <link rel="preconnect" href="https://api-js.mixpanel.com" crossorigin />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="altmove" />
-    <meta property="og:description" content="Learn from every move you play. Real-time coaching, weakness tracking, and Stockfish-powered analysis." />
+    <meta property="og:site_name" content="altmove" />
+    <meta property="og:title" content="altmove — Learn Chess from Every Move You Play" />
+    <meta property="og:description" content="Play against Stockfish, get real-time coaching, track your weaknesses, and drill your mistakes with spaced repetition. Free chess improvement tool." />
     <meta property="og:url" content="https://altmove.in" />
     <meta property="og:image" content="https://altmove.in/og-image.png" />
     <meta property="og:image:width" content="1200" />
@@ -18,12 +29,41 @@
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="altmove" />
-    <meta name="twitter:description" content="Learn from every move you play. Real-time coaching, weakness tracking, and Stockfish-powered analysis." />
+    <meta name="twitter:title" content="altmove — Learn Chess from Every Move You Play" />
+    <meta name="twitter:description" content="Play against Stockfish, get real-time coaching, track your weaknesses, and drill your mistakes with spaced repetition. Free chess improvement tool." />
     <meta name="twitter:image" content="https://altmove.in/og-image.png" />
     <meta name="twitter:image:alt" content="altmove — learn from every move you play" />
 
-    <title>altmove</title>
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "altmove",
+      "url": "https://altmove.in",
+      "description": "Chess learning app with real-time coaching, weakness tracking, and Stockfish-powered analysis. Play, learn from your mistakes, and improve with spaced-repetition drills.",
+      "applicationCategory": "GameApplication",
+      "operatingSystem": "Web",
+      "browserRequirements": "Requires a modern web browser with JavaScript enabled",
+      "image": "https://altmove.in/og-image.png",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "featureList": [
+        "Play against Stockfish engine",
+        "Real-time per-move coaching",
+        "Fork-and-return alternate line exploration",
+        "Persistent weakness tracking",
+        "Spaced-repetition drills",
+        "Game library with import/export",
+        "Optional AI-powered coaching (BYOK)"
+      ]
+    }
+    </script>
+
+    <title>altmove — Learn Chess from Every Move You Play</title>
   </head>
   <body class="bg-slate-950 text-slate-100 antialiased">
     <div id="root"></div>

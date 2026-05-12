@@ -19,6 +19,7 @@ import { importPgnToTree, buildImportMetadata, determineHumanColor } from '../ga
 import { analyzeImportedGame } from '../game/analyzeImportedGame';
 import { trackEvent } from '../lib/analytics';
 import { pushGameRemote } from '../sync/syncOrchestrator';
+import PageMeta from '../components/PageMeta';
 
 /** Date-only string for grouping (e.g. "Apr 12, 2026"). */
 function formatDateGroup(ts: number): string {
@@ -220,6 +221,12 @@ export default function LibraryPage() {
 
   return (
     <main className="mx-auto flex max-w-3xl flex-1 flex-col gap-4 p-3 md:gap-6 md:p-6">
+      <PageMeta
+        title="Game Library"
+        description="Browse and replay your saved chess games with full move-by-move analysis and coaching."
+        noIndex
+        canonicalPath="/library"
+      />
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-100">

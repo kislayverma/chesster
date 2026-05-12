@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /play
+Disallow: /mistakes
+Disallow: /practice
+Disallow: /library
+Disallow: /profile
+Disallow: /settings
+Disallow: /onboarding
+Disallow: /api/
+
+Sitemap: https://altmove.in/sitemap.xml

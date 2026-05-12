@@ -22,6 +22,7 @@ import { NavLink } from 'react-router-dom';
 import { usePracticeStore } from '../srs/practiceStore';
 import type { PracticeCard } from '../srs/types';
 import { trackEvent } from '../lib/analytics';
+import PageMeta from '../components/PageMeta';
 
 // ---- click-to-move styles (matches Board.tsx) --------------------------------
 
@@ -374,6 +375,12 @@ export default function PracticePage() {
 
   return (
     <main className="flex flex-1 flex-col items-center gap-4 p-3 md:gap-6 md:p-6">
+      <PageMeta
+        title="Practice"
+        description="Spaced-repetition drills built from your real mistakes. Solve positions you got wrong and build lasting chess skills."
+        noIndex
+        canonicalPath="/practice"
+      />
       {/* Header */}
       <div className="flex w-full max-w-[480px] items-center justify-between">
         <h2 className="text-sm font-semibold text-slate-200">

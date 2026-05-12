@@ -26,6 +26,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../auth/authStore';
 import { useProfileStore } from '../profile/profileStore';
+import PageMeta from '../components/PageMeta';
 import {
   declineMigration,
   runMigration,
@@ -214,6 +215,12 @@ export default function OnboardingPage() {
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center p-3 md:p-6">
+      <PageMeta
+        title="Welcome"
+        description="Set up your altmove chess profile and start your improvement journey."
+        noIndex
+        canonicalPath="/onboarding"
+      />
       <section className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900/40 p-4 md:p-6">
         <h1 className="text-xl font-bold text-slate-100">Welcome to altmove</h1>
         <p className="mt-2 text-sm leading-relaxed text-slate-400">

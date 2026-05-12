@@ -28,6 +28,7 @@ import { hasLLM, withByokHeader } from '../lib/featureFlags';
 import { getCurrentProfileSummary } from '../profile/profileStore';
 import { acplToRating, ratingStanding } from '../lib/rating';
 import { trackEvent } from '../lib/analytics';
+import PageMeta from '../components/PageMeta';
 import { isTreeAnalyzed, analyzeImportedGame, type AnalysisProgress } from '../game/analyzeImportedGame';
 
 const LAST_MOVE_STYLE: Record<string, string | number> = {
@@ -349,6 +350,11 @@ export default function GameReviewPage() {
         ? 'lg:grid-cols-[auto_260px_260px]'
         : 'lg:grid-cols-[auto_320px]'
     }`}>
+      <PageMeta
+        title="Game Review"
+        description="Replay and analyze your chess game move by move with engine evaluations and coaching."
+        noIndex
+      />
       {/* Board section */}
       <section className="flex flex-col items-center gap-4">
         <NavLink

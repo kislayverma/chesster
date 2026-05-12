@@ -25,6 +25,7 @@ import { MOTIF_LABELS, type MotifId } from '../tagging/motifs';
 import type { OpeningStat, StreaksState } from '../profile/types';
 import JourneyCard from '../components/JourneyCard';
 import { hasLLM, withByokHeader } from '../lib/featureFlags';
+import PageMeta from '../components/PageMeta';
 
 function motifLabel(id: string): string {
   return MOTIF_LABELS[id as MotifId] ?? id.replace(/_/g, ' ');
@@ -175,6 +176,12 @@ export default function ProfilePage() {
 
   return (
     <main className="mx-auto flex max-w-3xl flex-1 flex-col gap-4 p-3 md:gap-6 md:p-6">
+      <PageMeta
+        title="Profile"
+        description="Your chess profile — rating, strengths, weaknesses, and journey progression."
+        noIndex
+        canonicalPath="/profile"
+      />
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-100">

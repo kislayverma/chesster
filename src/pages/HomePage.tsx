@@ -12,6 +12,7 @@ import { ratingStanding, ALL_LEVELS, getLevelDef, nextLevel } from '../lib/ratin
 import { MIN_GAMES_FOR_PROMOTION } from '../lib/journey';
 import type { StreaksState } from '../profile/types';
 import PromotionBanner from '../components/PromotionBanner';
+import PageMeta from '../components/PageMeta';
 
 /** Chess piece Unicode for each level. */
 const LEVEL_PIECES: Record<string, string> = {
@@ -55,6 +56,12 @@ export default function HomePage() {
 
     return (
       <main className="mx-auto flex max-w-3xl flex-1 flex-col items-center justify-center gap-6 p-3 md:gap-8 md:p-6">
+        <PageMeta
+          title="Dashboard"
+          description="Your chess journey dashboard. Track your rating, streaks, and weekly goals."
+          noIndex
+          canonicalPath="/"
+        />
         <PromotionBanner />
 
         {/* Greeting */}
@@ -114,6 +121,11 @@ export default function HomePage() {
   // ── State 1: Not logged in (default) ────────────────────────────
   return (
     <main className="mx-auto flex max-w-3xl flex-1 flex-col items-center justify-center gap-6 p-3 md:gap-10 md:p-6">
+      <PageMeta
+        title="altmove"
+        description="Learn from every move you play. Play against Stockfish, get real-time coaching, track your weaknesses, and improve with spaced-repetition drills. Free chess improvement tool."
+        canonicalPath="/"
+      />
       {/* Hero */}
       <section className="flex max-w-xl flex-col items-center gap-4 text-center">
         <h1 className="text-4xl font-extrabold tracking-tight text-slate-100">

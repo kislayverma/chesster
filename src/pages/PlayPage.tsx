@@ -17,6 +17,7 @@ import { useGameStore } from '../game/gameStore';
 import { useProfileStore } from '../profile/profileStore';
 import { acplToRating, ratingStanding } from '../lib/rating';
 import { trackEvent } from '../lib/analytics';
+import PageMeta from '../components/PageMeta';
 
 export default function PlayPage() {
   const turn = useGameStore((s) => s.turn);
@@ -143,6 +144,12 @@ export default function PlayPage() {
 
   return (
     <>
+    <PageMeta
+      title="Play"
+      description="Play chess against Stockfish and receive real-time coaching on every move."
+      noIndex
+      canonicalPath="/play"
+    />
     <main className="grid flex-1 grid-cols-1 gap-3 p-3 lg:gap-6 lg:p-6 lg:grid-cols-[auto_auto_320px]">
       {/* Column 1: Board + controls */}
       <section className="flex flex-col items-center gap-3 lg:gap-4">
