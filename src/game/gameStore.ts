@@ -1157,7 +1157,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         ...EMPTY_COACH_STATE,
         coachingPaused: false,
         // Apply human color if provided (e.g. "Play from here").
-        ...(opts?.humanColor ? { humanColor: opts.humanColor } : {}),
+        // Otherwise randomize between white and black.
+        humanColor: opts?.humanColor ?? (Math.random() < 0.5 ? 'w' : 'b'),
       });
       // If it's the engine's turn (side to move ≠ human), kick Stockfish.
       const state = get();

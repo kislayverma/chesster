@@ -15,7 +15,7 @@ import PracticePrompt from '../components/PracticePrompt';
 import StackPanel from '../components/StackPanel';
 import { useGameStore } from '../game/gameStore';
 import { useProfileStore } from '../profile/profileStore';
-import { acplToRating, ratingStanding } from '../lib/rating';
+import { acplToRating } from '../lib/rating';
 import { trackEvent } from '../lib/analytics';
 import PageMeta from '../components/PageMeta';
 
@@ -60,11 +60,7 @@ export default function PlayPage() {
   }, [gameFinished, acplHistory]);
 
   const statusLine = gameFinished
-    ? displayResult
-      ? gameRating != null
-        ? `Game over · ${displayResult} · Rating: ${gameRating} (${ratingStanding(gameRating)})`
-        : `Game over · ${displayResult}`
-      : 'Game over'
+    ? null
     : `${turn === 'w' ? 'White' : 'Black'} to move${inCheck ? ' · check' : ''}`;
 
   // Track game-finished event once.
@@ -170,14 +166,17 @@ export default function PlayPage() {
         )}
 
         <div className="w-full max-w-[480px]">
-          <Board orientation={boardOrientation} />
+          <Board orientation={boardOrientation} humanColor={humanColor} gameRating={gameRating} />
         </div>
 
         {/* Controls — right under the board */}
+        {!gameFinished && (
         <div className="flex w-full max-w-[480px] flex-wrap items-center justify-center gap-2 text-xs lg:gap-3 lg:text-sm">
-          <span className="truncate rounded bg-slate-800 px-2 py-1 text-center text-slate-300 lg:px-3">
-            {statusLine}
-          </span>
+          {statusLine && (
+            <span className="truncate rounded bg-slate-800 px-2 py-1 text-center text-slate-300 lg:px-3">
+              {statusLine}
+            </span>
+          )}
 
           {/* Navigation: back / forward */}
           <button
@@ -199,7 +198,7 @@ export default function PlayPage() {
             &rarr;
           </button>
 
-          {!gameFinished && historyLength > 0 && (
+          {historyLength > 0 && (
             <button
               type="button"
               onClick={() => {
@@ -224,6 +223,7 @@ export default function PlayPage() {
             New game
           </button>
         </div>
+        )}
 
         {/* Coach panel — visible after controls on mobile, hidden on desktop (shown in sidebar) */}
         <div className="w-full max-w-[480px] lg:hidden">

@@ -14,6 +14,8 @@ import { playMoveSound, playCaptureSound, playWarningBeep } from '../lib/moveSou
 
 interface BoardProps {
   orientation?: 'white' | 'black';
+  humanColor?: 'w' | 'b';
+  gameRating?: number | null;
 }
 
 /** Amber highlight for the "you should have played this" arrow. */
@@ -41,7 +43,7 @@ const SELECTED_SQUARE_STYLE: Record<string, string | number> = {
   backgroundColor: 'rgba(255, 255, 0, 0.45)',
 };
 
-export default function Board({ orientation = 'white' }: BoardProps) {
+export default function Board({ orientation = 'white', humanColor = 'w', gameRating }: BoardProps) {
   const navigate = useNavigate();
   const fen = useGameStore((s) => s.fen);
   const makeMove = useGameStore((s) => s.makeMove);
@@ -298,10 +300,10 @@ export default function Board({ orientation = 'white' }: BoardProps) {
   let gameOverHeadline = 'Game Over';
   let gameOverSubtext = '';
   if (displayResult === '1-0') {
-    gameOverHeadline = 'White wins';
+    gameOverHeadline = humanColor === 'w' ? 'You won!' : 'You lost';
     gameOverSubtext = inCheck ? 'by checkmate' : '';
   } else if (displayResult === '0-1') {
-    gameOverHeadline = 'Black wins';
+    gameOverHeadline = humanColor === 'b' ? 'You won!' : 'You lost';
     gameOverSubtext = inCheck ? 'by checkmate' : '';
   } else if (displayResult === '1/2-1/2') {
     gameOverHeadline = 'Draw';
@@ -351,8 +353,8 @@ export default function Board({ orientation = 'white' }: BoardProps) {
             {gameOverSubtext && (
               <p className="text-sm text-slate-400">{gameOverSubtext}</p>
             )}
-            {displayResult && (
-              <span className="font-mono text-lg text-slate-300">{displayResult}</span>
+            {gameRating != null && (
+              <span className="font-mono text-lg text-slate-300">Rating: {gameRating}</span>
             )}
             <div className="flex gap-3 pt-2">
               <button
