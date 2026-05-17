@@ -55,7 +55,7 @@ export default function HomePage() {
     const gamesNeeded = Math.max(0, MIN_GAMES_FOR_PROMOTION - (journey?.gamesAtCurrentLevel ?? 0));
 
     return (
-      <main className="mx-auto flex max-w-3xl flex-1 flex-col items-center justify-center gap-6 p-3 md:gap-8 md:p-6">
+      <main className="mx-auto flex max-w-3xl flex-1 flex-col items-center justify-center gap-3 p-3 md:gap-4 md:p-4">
         <PageMeta
           title="Dashboard"
           description="Your chess journey dashboard. Track your rating, streaks, and weekly goals."
@@ -64,13 +64,13 @@ export default function HomePage() {
         />
         <PromotionBanner />
 
-        {/* Greeting */}
-        <h1 className="text-3xl font-extrabold tracking-tight text-slate-100">
-          {greeting}, {name}
-        </h1>
-
-        {/* Streak badge */}
-        {streaks && <StreakBadge currentStreak={streaks.currentStreak} longestStreak={streaks.longestStreak} />}
+        {/* Greeting + streak inline */}
+        <div className="flex flex-col items-center gap-1">
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-100 md:text-3xl">
+            {greeting}, {name}
+          </h1>
+          {streaks && <StreakBadge currentStreak={streaks.currentStreak} longestStreak={streaks.longestStreak} />}
+        </div>
 
         {/* Full journey ladder with current level highlighted */}
         <JourneyLadder currentLevel={levelDef.key} />
@@ -81,21 +81,21 @@ export default function HomePage() {
             <span>{levelDef.name}</span>
             <span>{next ? next.name : 'Max level'}</span>
           </div>
-          <div className="h-3 rounded-full bg-slate-800">
+          <div className="h-2.5 rounded-full bg-slate-800">
             <div
               className="h-full rounded-full bg-emerald-500 transition-all"
               style={{ width: `${Math.min(100, progress)}%` }}
             />
           </div>
           {totalGames > 0 && journey?.rollingRating != null && journey.rollingRating > 0 && (
-            <p className="mt-1 text-center text-sm font-semibold text-slate-200">
+            <p className="mt-0.5 text-center text-sm font-semibold text-slate-200">
               Current Rating: ~{journey.rollingRating}{' '}
               <span className="font-normal text-slate-400">
                 ({ratingStanding(journey.rollingRating)})
               </span>
             </p>
           )}
-          <p className="mt-1 text-center text-xs text-slate-500">
+          <p className="mt-0.5 text-center text-xs text-slate-500">
             {next
               ? progress >= 99 && gamesNeeded > 0
                 ? `Almost there — play ${gamesNeeded} more game${gamesNeeded !== 1 ? 's' : ''} to promote`
@@ -110,7 +110,7 @@ export default function HomePage() {
         {/* Play CTA */}
         <NavLink
           to="/play"
-          className="rounded-lg bg-emerald-600 px-8 py-3 text-lg font-semibold text-white shadow-lg hover:bg-emerald-500 transition-colors"
+          className="rounded-lg bg-emerald-600 px-8 py-2.5 text-lg font-semibold text-white shadow-lg hover:bg-emerald-500 transition-colors"
         >
           Play a game
         </NavLink>
@@ -179,21 +179,21 @@ function FeatureCards() {
 
 function JourneyLadder({ currentLevel }: { currentLevel?: string }) {
   return (
-    <section className="w-full max-w-2xl rounded-lg border border-slate-800 bg-slate-900/40 p-5">
-      <h2 className="mb-4 text-center text-sm font-semibold uppercase tracking-wider text-slate-500">
+    <section className="w-full max-w-2xl rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-3">
+      <h2 className="mb-2 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
         Your Journey
       </h2>
       <div className="flex items-start justify-between gap-1">
         {ALL_LEVELS.map((level, i) => {
           const isCurrent = level.key === currentLevel;
           return (
-            <div key={level.key} className="flex flex-1 flex-col items-center gap-1">
+            <div key={level.key} className="flex flex-1 flex-col items-center gap-0.5">
               {/* Piece */}
               <span
                 className={`leading-none transition-all ${
                   isCurrent
-                    ? 'text-5xl text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]'
-                    : 'text-3xl text-slate-600 sm:text-4xl'
+                    ? 'text-4xl text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]'
+                    : 'text-2xl text-slate-600 sm:text-3xl'
                 }`}
               >
                 {LEVEL_PIECES[level.key] ?? '?'}
@@ -206,13 +206,13 @@ function JourneyLadder({ currentLevel }: { currentLevel?: string }) {
               <span
                 className={`text-center leading-tight font-semibold ${
                   isCurrent
-                    ? 'text-xs text-emerald-300'
-                    : 'text-[11px] text-slate-500'
+                    ? 'text-[11px] text-emerald-300'
+                    : 'text-[10px] text-slate-500'
                 }`}
               >
                 {level.name}
               </span>
-              <span className={`text-[10px] ${isCurrent ? 'text-slate-400' : 'text-slate-600'}`}>
+              <span className={`text-[9px] ${isCurrent ? 'text-slate-400' : 'text-slate-600'}`}>
                 {level.floor > 0 ? `${level.floor}+` : '< 900'}
               </span>
             </div>
@@ -271,11 +271,11 @@ function WeeklyGoals({ streaks }: { streaks: StreaksState }) {
   const reviewsDone = reviewPct >= 100;
 
   return (
-    <div className="w-full max-w-sm rounded-lg border border-slate-800 bg-slate-900/40 p-4">
-      <h3 className="mb-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
+    <div className="w-full max-w-sm rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-2.5">
+      <h3 className="mb-2 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
         Weekly Goals
       </h3>
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
         {/* Games goal */}
         <div>
           <div className="mb-1 flex items-center justify-between text-xs">
