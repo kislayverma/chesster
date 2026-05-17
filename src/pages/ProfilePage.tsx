@@ -36,7 +36,6 @@ export default function ProfilePage() {
   const hydrated = useProfileStore((s) => s.hydrated);
   const clearProfile = useProfileStore((s) => s.clearProfile);
   const authStatus = useAuthStore((s) => s.status);
-  const syncing = useAuthStore((s) => s.syncing);
   const isAuthenticated = authStatus === 'authenticated';
 
   // Compute narrative
@@ -110,7 +109,7 @@ export default function ProfilePage() {
     return { best, worst };
   }, [profile]);
 
-  if (!hydrated || syncing) {
+  if (!hydrated) {
     return (
       <main className="flex flex-1 items-center justify-center p-3 md:p-6">
         <p className="text-sm text-slate-500">Loading profile...</p>

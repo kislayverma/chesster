@@ -51,12 +51,12 @@ function phaseName(phase: string): string {
 
 export function computePlayerNarrative(profile: PlayerProfile): PlayerNarrative {
   const { totalGames, phaseCpLoss, journeyState } = profile;
-  const journey = journeyState;
-  const displayName = journey.displayName;
+  const journey = journeyState ?? { displayName: undefined, currentLevel: 'newcomer', rollingRating: 0 } as typeof journeyState;
+  const displayName = journey?.displayName;
 
-  const currentDef = getLevelDef(journey.currentLevel);
-  const next = nextLevel(journey.currentLevel);
-  const rollingRating = journey.rollingRating;
+  const currentDef = getLevelDef(journey?.currentLevel ?? 'newcomer');
+  const next = nextLevel(journey?.currentLevel ?? 'newcomer');
+  const rollingRating = journey?.rollingRating ?? 0;
 
   // Retired weaknesses
   const retired = getRetiredWeaknesses(profile);

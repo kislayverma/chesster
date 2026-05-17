@@ -87,7 +87,7 @@ export function buildProfileSummary(
     })),
     phaseCpLoss: profile.phaseCpLoss,
     totalGames: profile.totalGames,
-    currentLevel: profile.journeyState.currentLevel,
+    currentLevel: profile.journeyState?.currentLevel ?? 'newcomer',
   };
 }
 
