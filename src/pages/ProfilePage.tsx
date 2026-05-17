@@ -268,6 +268,26 @@ export default function ProfilePage() {
             Weaknesses
           </h2>
 
+          {/* Conquered */}
+          {retired.length > 0 && (
+            <div className="mb-4">
+              <div className="mb-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                Conquered
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {retired.map((w) => (
+                  <span
+                    key={w.motif}
+                    className="rounded bg-emerald-900/30 px-2 py-0.5 text-[11px] text-emerald-300"
+                  >
+                    {motifLabel(w.motif)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Watch out */}
           {watchOut.length > 0 && (
             <div className="mb-4">
@@ -291,7 +311,7 @@ export default function ProfilePage() {
 
           {/* Improving */}
           {improving.length > 0 && (
-            <div className="mb-4">
+            <div>
               <div className="mb-1.5 flex items-center gap-1.5 text-xs text-sky-400">
                 <span className="inline-block h-2 w-2 rounded-full bg-sky-500" />
                 Improving
@@ -305,26 +325,6 @@ export default function ProfilePage() {
                     decayedCount={w.decayedCount}
                     accent="sky"
                   />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Retired */}
-          {retired.length > 0 && (
-            <div>
-              <div className="mb-1.5 flex items-center gap-1.5 text-xs text-emerald-400">
-                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-                Conquered
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {retired.map((w) => (
-                  <span
-                    key={w.motif}
-                    className="rounded bg-emerald-900/30 px-2 py-0.5 text-[11px] text-emerald-300"
-                  >
-                    {motifLabel(w.motif)}
-                  </span>
                 ))}
               </div>
             </div>
@@ -466,7 +466,7 @@ function WeaknessRow({
         style={{ width: `${barPct}%` }}
       />
       <span className="relative z-10 text-slate-200">{label}</span>
-      <span className="relative z-10 font-mono tabular-nums text-slate-500">
+      <span className="relative z-10 font-mono tabular-nums text-slate-200">
         {count}×
       </span>
     </div>
