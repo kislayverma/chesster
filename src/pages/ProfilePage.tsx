@@ -109,6 +109,22 @@ export default function ProfilePage() {
     return { best, worst };
   }, [profile]);
 
+  const { totalGames, totalMoves, acplHistory, phaseCpLoss } = profile;
+
+  // Track that the profile was viewed with meaningful data.
+  // Must be called before any early returns to satisfy Rules of Hooks.
+  useEffect(() => {
+    if (totalGames > 0) {
+      trackEvent('profile_viewed', {
+        totalGames,
+        level: profile.journeyState?.currentLevel ?? 'unknown',
+        rating: profile.journeyState?.rollingRating ?? 0,
+      });
+    }
+  // Fire once per mount, not on every profile change.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (!hydrated) {
     return (
       <main className="flex flex-1 items-center justify-center p-3 md:p-6">
@@ -116,8 +132,6 @@ export default function ProfilePage() {
       </main>
     );
   }
-
-  const { totalGames, totalMoves, acplHistory, phaseCpLoss } = profile;
 
   if (totalGames === 0) {
     return (
@@ -134,19 +148,6 @@ export default function ProfilePage() {
       </main>
     );
   }
-
-  // Track that the profile was viewed with meaningful data.
-  useEffect(() => {
-    if (totalGames > 0) {
-      trackEvent('profile_viewed', {
-        totalGames,
-        level: profile.journeyState?.currentLevel ?? 'unknown',
-        rating: profile.journeyState?.rollingRating ?? 0,
-      });
-    }
-  // Fire once per mount, not on every profile change.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Average and latest ratings derived from ACPL.
   const avgAcpl =
