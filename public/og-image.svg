@@ -5,8 +5,8 @@
       <stop offset="100%" stop-color="#1e293b"/>
     </linearGradient>
     <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#3b82f6"/>
-      <stop offset="100%" stop-color="#8b5cf6"/>
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#059669"/>
     </linearGradient>
   </defs>
 
@@ -36,7 +36,10 @@
   </g>
 
   <!-- Knight icon -->
-  <text x="80" y="280" font-size="120" font-family="serif" fill="#3b82f6" opacity="0.9">&#9822;</text>
+  <g transform="translate(55,145) scale(3.2)" opacity="0.9">
+    <path d="M 22,10 C 32.5,11 38.5,18 38,39 L 15,39 C 15,30 25,32.5 23,18 C 20,18 17,22 14,23 C 9.5,25.5 7.5,24 6,23.5 C 5,22.5 5,20.5 6,19 C 7,17.5 9,15.5 11,14 C 13,12.5 17,9.5 22,10 Z" fill="#10b981" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="15" cy="15.5" r="1.5" fill="#0f172a"/>
+  </g>
 
   <!-- App name -->
   <text x="80" y="370" font-size="72" font-weight="700" font-family="system-ui, -apple-system, sans-serif" fill="#f1f5f9" letter-spacing="-2">altmove</text>
@@ -46,14 +49,14 @@
 
   <!-- Feature pills -->
   <g font-size="16" font-family="system-ui, -apple-system, sans-serif">
-    <rect x="80" y="460" width="140" height="32" rx="16" fill="#1e3a5f"/>
-    <text x="150" y="481" fill="#60a5fa" text-anchor="middle">Real-time Coach</text>
+    <rect x="80" y="460" width="140" height="32" rx="16" fill="#064e3b"/>
+    <text x="150" y="481" fill="#6ee7b7" text-anchor="middle">Real-time Coach</text>
 
-    <rect x="236" y="460" width="170" height="32" rx="16" fill="#1e3a5f"/>
-    <text x="321" y="481" fill="#60a5fa" text-anchor="middle">Weakness Tracking</text>
+    <rect x="236" y="460" width="170" height="32" rx="16" fill="#064e3b"/>
+    <text x="321" y="481" fill="#6ee7b7" text-anchor="middle">Weakness Tracking</text>
 
-    <rect x="422" y="460" width="150" height="32" rx="16" fill="#1e3a5f"/>
-    <text x="497" y="481" fill="#60a5fa" text-anchor="middle">Stockfish Engine</text>
+    <rect x="422" y="460" width="150" height="32" rx="16" fill="#064e3b"/>
+    <text x="497" y="481" fill="#6ee7b7" text-anchor="middle">Stockfish Engine</text>
   </g>
 
   <!-- Bottom border -->
