@@ -144,20 +144,17 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
   },
 
   replaceProfile: (next) => {
-    // If the local journey state is more advanced (more games played
-    // at current level, higher level, etc.), keep it. This prevents a
-    // stale remote pull from wiping local progress during the debounce
-    // window after a game finishes or when the server has an empty
-    // '{}' journey_state.
-    const local = get().profile.journeyState;
-    const remote = next.journeyState;
-    if (local) {
-      const localGames = local.gamesAtCurrentLevel ?? 0;
-      const remoteGames = remote?.gamesAtCurrentLevel ?? 0;
-      const localMoreAdvanced = localGames > remoteGames;
-      if (localMoreAdvanced) {
-        next = { ...next, journeyState: local };
-      }
+    // If the local profile has more games played, keep its journey
+    // state. This prevents a stale remote pull from wiping local
+    // progress during the debounce window after a game finishes or
+    // when the server has an empty '{}' journey_state.
+    // We compare totalGames (which never resets) instead of
+    // gamesAtCurrentLevel (which resets to 0 on every promotion).
+    const local = get().profile;
+    const localTotalGames = local.totalGames;
+    const remoteTotalGames = next.totalGames;
+    if (localTotalGames > remoteTotalGames && local.journeyState) {
+      next = { ...next, journeyState: local.journeyState };
     }
     // Keep local streaks if they are more recent than remote.
     const localStreaks = get().profile.streaksState;
